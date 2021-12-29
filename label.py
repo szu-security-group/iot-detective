@@ -773,7 +773,7 @@ def main():
         get_test_ips_possible_devices_similarity()  # 得到测试集中每个ip和其可能匹配的设备间的tf-idf相似度
 
     # get_devices_thetas_performance()
-    # draw_devices_performance()  # 每个设备一张图
+    draw_devices_performance()  # 每个设备一张图
 
     # get_devices_best_theta_performance()
 

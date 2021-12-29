@@ -179,7 +179,8 @@ def draw_devices_best_theta_performance():
     plt.bar(x_3, recalls, width=bar_width, label="recall", color="steelblue")
     plt.bar(x_4, f2s, width=bar_width, label="F2", color="green")
 
-    plt.legend(bbox_to_anchor=(1, 1))
+    # plt.legend(bbox_to_anchor=(1, 1))
+    plt.legend()
     plt.tight_layout()
     fig_path = os.path.join(ALL_RESULT_FOLDER_NAME, "devices_best_theta_performance.svg")
     plt.savefig(fig_path, format='svg')
@@ -226,7 +227,7 @@ def get_average_performance_nat():
         ips_fp = 0
         ips_fn = 0
 
-        for file_index in range(TEST_PCAPS_NUM - 20, TEST_PCAPS_NUM - 10):
+        for file_index in range(1, TEST_PCAPS_NUM + 1):
             # 对于每一个测试文件
             # 一些常量
             test_target_name = "finder_09_" + str(file_index) + "_NAT"
@@ -439,7 +440,7 @@ def main():
     # draw_histogram(devices_similarity_for_picture, DEVICES_SIMILARITY_FOR_PICTURE_PICTURE)
 
     # get_average_performance_nat()
-    # draw_theta_coefficients_performance()
+    draw_theta_coefficients_performance()
 
     pass
 
