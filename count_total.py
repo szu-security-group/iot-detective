@@ -11,11 +11,11 @@ TEST_IPS_REGULAR_DOMAINS_TFIDF_RATIO_FILE = os.path.join(ALL_RESULT_FOLDER_NAME,
 DEVICES_REGULAR_DOMAINS_TFIDF_RATIO_FILE = os.path.join(ALL_RESULT_FOLDER_NAME,
                                                         "devices_regular_domains_tfidf_ratio.json")
 DEVICES_REGULAR_DOMAINS_TFIDF_RATIO_PICTURE = os.path.join(ALL_RESULT_FOLDER_NAME,
-                                                           "devices_regular_domains_tfidf_ratio.svg")
+                                                           "devices_regular_domains_tfidf_ratio")
 DEVICES_SIMILARITY_FOR_PICTURE_FILE = os.path.join(ALL_RESULT_FOLDER_NAME,
                                                    "devices_similarity_for_picture.json")
 DEVICES_SIMILARITY_FOR_PICTURE_PICTURE = os.path.join(ALL_RESULT_FOLDER_NAME,
-                                                      "devices_similarity_for_picture.svg")
+                                                      "devices_similarity_for_picture")
 
 THETA_COEFFICIENTS_PERFORMANCE_FILE = os.path.join(ALL_RESULT_FOLDER_NAME, "theta_coefficients_performance.json")
 
@@ -38,6 +38,10 @@ def get_test_ips_regular_domains_tfidf_ratio():
 
 
 def get_devices_regular_domains_tfidf_ratio():
+    """
+    获取各个设备规律域名TF-IDF值所占比例
+    :return:
+    """
     test_ips_devices_info = load_json(TEST_IPS_DEVICES_INFO_FILE)
     test_ips_domains_regularity_score = load_json(TEST_IPS_DOMAINS_REGULARITY_SCORE_FILE)
     test_ips_domains_tfidf = load_json(TEST_IPS_INFO_FILE, "ips_domains_tfidf")
@@ -55,13 +59,17 @@ def get_devices_regular_domains_tfidf_ratio():
     store_json(devices_regular_domains_tfidf_ratio, DEVICES_REGULAR_DOMAINS_TFIDF_RATIO_FILE)
 
 
-def draw_scatter():
+def draw_dns_behaviors():
     """
     画出各个设备访问域名的散点图，即论文图1
     :return:
     """
-    ips_domains_pkts_time = load_json(TEST_IPS_DOMAINS_PKTS_TIME_FILE, "ips_domains_pkts_time")
-    train_ips_device_info = load_json(TRAIN_IPS_DEVICE_INFO_FILE)
+    # ips_domains_pkts_time = load_json(TEST_IPS_DOMAINS_PKTS_TIME_FILE, "ips_domains_pkts_time")
+    # train_ips_device_info = load_json(TRAIN_IPS_DEVICE_INFO_FILE)
+    ips_domains_pkts_time = load_json(
+        os.path.join(TEST_RESULT_FOLDER_NAME, "arunan_dns_1", "test_ips_domains_pkts_time.json"),
+        "ips_domains_pkts_time")
+    train_ips_device_info = load_json(os.path.join(TRAIN_DATA_FOLDER_NAME, "arunan_dns_23-30" + ".json"))
     description_list = list()
     i = 0
     for ip, domains_time in ips_domains_pkts_time.items():
@@ -77,14 +85,18 @@ def draw_scatter():
     plt.rcParams['savefig.dpi'] = 500  # 图片像素
     plt.rcParams['figure.dpi'] = 500  # 分辨率
     plt.yticks(fontsize=8)
-    plt.title("DNS behavior of IoT devices")
-    plt.xlabel("hour of the day")
-    plt.ylabel("IoT domain name")
+    # plt.title("DNS behavior of IoT devices")
+    # plt.xlabel("hour of the day")
+    # plt.ylabel("IoT domain name")
+    plt.title("物联网设备的DNS查询行为")
+    plt.xlabel("一天中的时间")
+    plt.ylabel("查询域名")
     plt.tight_layout()
     x_major_locator = plt.MultipleLocator(2)
     ax = plt.gca()
     # ax为两条坐标轴的实例
     ax.xaxis.set_major_locator(x_major_locator)
+    plt.savefig(os.path.join(ALL_RESULT_FOLDER_NAME, "dns_behavior.png"))
     plt.savefig(os.path.join(ALL_RESULT_FOLDER_NAME, "dns_behavior.svg"), format="svg")
     plt.show()
 
@@ -101,19 +113,23 @@ def draw_histogram(data_dict, fig_path):
     plt.rcParams['savefig.dpi'] = 800  # 图片像素
     plt.rcParams['figure.dpi'] = 800  # 分辨率
 
-    # plt.barh(devices, scores, color="steelblue")
-    # plt.title("TF-IDF Ratio of Regular Domain Names")
+    # plt.barh(devices, scores, color="green")
+    # # plt.title("Matching Results")
+    # plt.title("匹配结果")
 
-    plt.barh(devices, scores, color="green")
-    plt.title("Matching Results")
+    plt.barh(devices, scores, color="steelblue")
 
-    plt.yticks(fontsize=5)
+    plt.yticks(fontsize=4)
     plt.xticks()
-    plt.xlabel("similarity score")
+    # plt.xlabel("similarity score")
+    # plt.xlabel("相似度得分")
+    # plt.xlabel("TF-IDF Ratio of Regular Domain Names")
+    # plt.xlabel("规律域名TF-IDF值所占比例")
     plt.ylabel("device")
+    # plt.ylabel("设备")
     plt.tight_layout()
-    # plt.savefig(fig_path)
-    plt.savefig(fig_path, format="svg")
+    plt.savefig(fig_path + ".png")
+    plt.savefig(fig_path + ".svg", format="svg")
     plt.show()
 
 
@@ -145,7 +161,8 @@ def draw_devices_best_theta_performance():
     devices_performance = load_json(DEVICES_PERFORMANCE_FILE)
     # devices_list = ["Google OnHub", "Nest Camera", "Belkin WeMo Motion Sensor", "LIFX Virtual Bulb", "Roku TV", "Roku4",
     #                 "Amazon Fire TV", "Apple HomePod", "Google Home Hub", "Sonos Beam"]
-    devices_list = ["Amazon Echo Gen1", "Apple HomePod", "Apple TV (4thGen)", "Belkin WeMo Crockpot", "Belkin WeMo Motion Sensor",
+    devices_list = ["Amazon Echo Gen1", "Apple HomePod", "Apple TV (4thGen)", "Belkin WeMo Crockpot",
+                    "Belkin WeMo Motion Sensor",
                     "Belkin WeMo Switch", "Google Home Mini", "Google Home", "Roku4", "Sonos Beam"]
     devices = list()
     thetas = list()
@@ -169,19 +186,24 @@ def draw_devices_best_theta_performance():
 
     # # 设置图形大小
     # plt.figure(figsize=(20, 8), dpi=20)
-    plt.title("Performance")
+    # plt.title("Performance")
 
     # 设置x轴的刻度
     plt.xticks([i + bar_width * 1.5 for i in x_1], devices, rotation=45, fontsize=6)
 
-    plt.bar(x_1, thetas, width=bar_width, label="theta", color="sienna")
-    plt.bar(x_2, precisions, width=bar_width, label="precision", color="darkorange")
-    plt.bar(x_3, recalls, width=bar_width, label="recall", color="steelblue")
-    plt.bar(x_4, f2s, width=bar_width, label="F2", color="green")
+    # plt.bar(x_1, thetas, width=bar_width, label="theta", color="sienna")
+    # plt.bar(x_2, precisions, width=bar_width, label="precision", color="darkorange")
+    # plt.bar(x_3, recalls, width=bar_width, label="recall", color="steelblue")
+    # plt.bar(x_4, f2s, width=bar_width, label="F2", color="green")
+    plt.bar(x_1, thetas, width=bar_width, label="识别阈值", color="sienna")
+    plt.bar(x_2, precisions, width=bar_width, label="精确率", color="darkorange")
+    plt.bar(x_3, recalls, width=bar_width, label="查全率", color="steelblue")
+    plt.bar(x_4, f2s, width=bar_width, label="F2分数", color="green")
 
-    # plt.legend(bbox_to_anchor=(1, 1))
-    plt.legend()
+    plt.legend(bbox_to_anchor=(1, 1))
+    # plt.legend()
     plt.tight_layout()
+    fig_path = os.path.join(ALL_RESULT_FOLDER_NAME, "devices_best_theta_performance.png")
     fig_path = os.path.join(ALL_RESULT_FOLDER_NAME, "devices_best_theta_performance.svg")
     plt.savefig(fig_path, format='svg')
 
@@ -276,7 +298,7 @@ def get_average_performance_nat():
     store_json(theta_coefficients_performance, THETA_COEFFICIENTS_PERFORMANCE_FILE)
 
 
-def base_draw_lines(data_dict, y_string_length, title, x_label, fig_path, targets=None):
+def base_draw_lines(data_dict, y_string_length, x_label, fig_path, targets=None, title=None):
     """
     需要传入的是类似以下的结构
     "0.0": {
@@ -305,29 +327,42 @@ def base_draw_lines(data_dict, y_string_length, title, x_label, fig_path, target
         y_s = list()
         for x in data_dict.keys():
             y_s.append(data_dict[x][target])
-        plt.title(title)
+        if title:
+            plt.title(title)
         plt.xlabel(x_label)
         max_y = max(y_s)
         max_index = y_s.index(max_y)
         max_x = x_s[max_index]
         show_max = "(" + str(max_x) + ", " + str(max_y)[:y_string_length] + ")"
         plt.annotate(show_max, xytext=(max_x, max_y), xy=(max_x, max_y), )
-        plt.plot(x_s, y_s, line_patterns[i], label=target)
+        # plt.plot(x_s, y_s, line_patterns[i], label=target)
+        plt.plot(x_s, y_s, line_patterns[i], label=LANGUAGE_MAP[target])
     plt.legend()
     plt.tight_layout()
-    plt.savefig(fig_path, format='svg')
+    if fig_path.endswith(".svg"):
+        plt.savefig(fig_path, format='svg')
+    else:
+        plt.savefig(fig_path)
     plt.show()
 
 
 def draw_theta_coefficients_performance():
+    """
+    画出在不同阈值系数下的NAT识别情况
+    :return:
+    """
     theta_coefficients_performance = load_json(THETA_COEFFICIENTS_PERFORMANCE_FILE)
     y_string_length = 6
-    title = "Performance Under Different Coefficients"
-    x_label = "coefficient"
+    # title = "Performance Under Different Coefficients"
+    # x_label = "coefficient"
+    # title = "Performance Under Different Coefficients"
+    x_label = "阈值系数"
+    fig_path = os.path.join(ALL_RESULT_FOLDER_NAME, "theta_coefficients_performance.png")
+    base_draw_lines(theta_coefficients_performance, y_string_length, x_label, fig_path,
+                    targets=["precision", "recall", "F2"], title=None)
     fig_path = os.path.join(ALL_RESULT_FOLDER_NAME, "theta_coefficients_performance.svg")
-    # base_draw_lines(theta_coefficients_performance, y_string_length, title, x_label, fig_path)
-    base_draw_lines(theta_coefficients_performance, y_string_length, title, x_label, fig_path,
-                    targets=["precision", "recall", "F2"])
+    base_draw_lines(theta_coefficients_performance, y_string_length, x_label, fig_path,
+                    targets=["precision", "recall", "F2"], title=None)
 
 
 def get_average_performance():
@@ -419,28 +454,34 @@ def get_devices_performance():
 
 
 def main():
-    # get_test_ips_devices_info_by_test_ips_info()
+    # 画出各个设备访问域名的散点图，即论文图1
+    # draw_dns_behaviors()
 
-    # get_devices_performance()  # 获取每个设备在最佳阈值下的表现
-
-    # draw_devices_best_theta_performance()  # 10设备的一张图
-    #
-    # average_precision, average_recall, average_f05, average_f1, average_f2 = get_average_performance()
-    # print(average_precision, average_recall, average_f05, average_f1, average_f2)
-
-    # get_test_ips_regular_domains_tfidf_ratio()
-    # get_devices_regular_domains_tfidf_ratio()
-    # devices_regular_domains_tfidf_ratio = load_json(DEVICES_REGULAR_DOMAINS_TFIDF_RATIO_FILE)
-    # draw_histogram(devices_regular_domains_tfidf_ratio, DEVICES_REGULAR_DOMAINS_TFIDF_RATIO_PICTURE)
-
-    # draw_scatter()
-
+    # 画出10个设备的相似情况
     # get_devices_similarity_for_picture()
     # devices_similarity_for_picture = load_json(DEVICES_SIMILARITY_FOR_PICTURE_FILE)
     # draw_histogram(devices_similarity_for_picture, DEVICES_SIMILARITY_FOR_PICTURE_PICTURE)
 
+    # 10设备的一张图
+    # draw_devices_best_theta_performance()
+
+    # 画出在不同阈值系数下的NAT识别情况
+    # draw_theta_coefficients_performance()
+
+    # 获取各个设备规律域名TF-IDF值所占比例
+    # get_test_ips_regular_domains_tfidf_ratio()
+    # get_devices_regular_domains_tfidf_ratio()
+    devices_regular_domains_tfidf_ratio = load_json(DEVICES_REGULAR_DOMAINS_TFIDF_RATIO_FILE)
+    draw_histogram(devices_regular_domains_tfidf_ratio, DEVICES_REGULAR_DOMAINS_TFIDF_RATIO_PICTURE)
+
+    # get_test_ips_devices_info_by_test_ips_info()
+
+    # get_devices_performance()  # 获取每个设备在最佳阈值下的表现
+    #
+    # average_precision, average_recall, average_f05, average_f1, average_f2 = get_average_performance()
+    # print(average_precision, average_recall, average_f05, average_f1, average_f2)
+
     # get_average_performance_nat()
-    draw_theta_coefficients_performance()
 
     pass
 

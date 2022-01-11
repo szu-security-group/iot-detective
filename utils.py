@@ -12,6 +12,11 @@ import datetime
 import tldextract
 
 from constants import *
+import matplotlib as mpl
+
+# mpl.rcParams['font.sans-serif'] = ['SimHei', 'KaiTi', 'FangSong']
+# mpl.rcParams['font.size'] = 12  # 字体大小
+# mpl.rcParams['axes.unicode_minus'] = False  # 正常显示负号
 
 
 def mkdir_if_not_exist(folder_name):

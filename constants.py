@@ -11,6 +11,11 @@ FIND_WORD_USE_STRUCTURE = False  # 是否使用结构化的数据来查找关键
 IS_LAB_NETWORK = False
 LABEL_FILE_LOW = 35
 LABEL_FILE_HIGH = 62
+LANGUAGE_MAP = {
+    "precision": "精确率",
+    "recall": "查全率",
+    "F2": "F2分数"
+}
 NAT_IP = "192.168.0.255"
 PROTOCOL_PREFIX = ["www.", "http.", "https."]
 REGULARITY_DELTA_TIME = 10
