@@ -4,6 +4,8 @@
 # @Author  : Zixing Xiao
 
 import math
+import random
+
 import scapy.all as sc
 from scapy.utils import rdpcap
 
@@ -68,7 +70,7 @@ def get_test_ips_other_domains():
     ips_domains_tfidf = load_json(TEST_IPS_INFO_FILE, "ips_domains_tfidf")
     test_ips_possible_devices = load_json(TEST_IPS_POSSIBLE_DEVICES_FILE)
     test_ips_possible_devices_similarity = load_json(TEST_IPS_POSSIBLE_DEVICES_SIMILARITY_FILE)
-    devices_knowledge_dict = get_jsonful_from_mongodb("devices_knowledge")
+    devices_knowledge_dict = get_jsonful_from_mongodb(DEVICES_KNOWLEDGE_COL_NAME)
 
     test_ips_other_domains = dict()
     for ip in ips_domains_tfidf.keys():
@@ -92,7 +94,7 @@ def get_test_ips_possible_devices():
     :return:
     """
     ips_domains_tfidf = load_json(TEST_IPS_INFO_FILE, "ips_domains_tfidf")
-    devices_great_domains_to_devices = get_jsonful_from_mongodb("great_domains", sub_key="devices")
+    devices_great_domains_to_devices = get_jsonful_from_mongodb("new_great_domains", sub_key="devices")
     test_ips_possible_devices = dict()
     for ip, domains_tfidf in ips_domains_tfidf.items():
         ip_possible_devices_set = set()
@@ -109,8 +111,8 @@ def get_test_ips_possible_devices_similarity():
     得到测试集中每个ip和其可能匹配的设备间的tf-idf相似度
     :return:
     """
-    devices_domains_tfidf = get_jsonful_from_mongodb("devices_knowledge", "domains_tfidf")
-    devices_domains_tfidf_vector_length = get_jsonful_from_mongodb("devices_knowledge", "tfidf_vector_length")
+    devices_domains_tfidf = get_jsonful_from_mongodb(DEVICES_KNOWLEDGE_COL_NAME, "domains_tfidf")
+    devices_domains_tfidf_vector_length = get_jsonful_from_mongodb(DEVICES_KNOWLEDGE_COL_NAME, "tfidf_vector_length")
     ips_domains_tfidf = load_json(TEST_IPS_INFO_FILE, "ips_domains_tfidf")
     test_ips_possible_devices = load_json(TEST_IPS_POSSIBLE_DEVICES_FILE)
     test_ips_possible_devices_similarity = dict()
@@ -269,7 +271,7 @@ def guess_type(common_types, domain):
     domain_split_list = domain.lower().split(".")
     for common_type in common_types:
         for word in domain_split_list:
-            if common_type == word:
+            if common_type in word:  # 只要类型是在单词中
                 if types_count is None:
                     types_count = dict()
                 guess_method = "1. domain_existence_method"
@@ -331,9 +333,9 @@ def guess_vendor(global_vendors, domain):
     guess_method = None
     guessed_vendor = None
     guessed_vendors_count = None
-    sub_domain, second_domain, suffix = tldextract.extract(domain)
 
     # 1. 域名判存法
+    sub_domain, second_domain, suffix = tldextract.extract(domain)
     if second_domain in global_vendors:
         guess_method = "1. domain_existence_method"
         guessed_vendor = second_domain
@@ -345,7 +347,7 @@ def guess_vendor(global_vendors, domain):
             guess_method = "2. whois_method"
 
     # 3. 响应判存法
-    if guessed_vendors_count is None:
+    if guessed_vendor is None:
         target_dict = visit_domain(domain)
         guessed_vendors_count = guess_target_by_visit(global_vendors, target_dict)
         if guessed_vendors_count is not None:
@@ -429,7 +431,8 @@ def get_test_ips_report(verify=False):
         test_ips_report[ip]["domains_guessed_results"] = dict()
         # for domain in test_ips_other_domains[ip]:
         for domain in ips_domains_tfidf[ip].keys():
-            if test_ips_domains_regularity_score[ip][domain] >= REGULARITY_THRESHOLD:
+            # if test_ips_domains_regularity_score[ip][domain] >= REGULARITY_THRESHOLD:
+            if test_ips_domains_regularity_score[ip][domain] >= 0:
                 # 如果过滤完匹配设备域名集后的域名的规律得分大于等于REGULARITY_THRESHOLD，就去猜测vendor和type信息
                 test_ips_report[ip]["domains_guessed_results"][domain] = {
                     "type": guess_type(common_types, domain),
@@ -440,12 +443,26 @@ def get_test_ips_report(verify=False):
     store_json(test_ips_report, TEST_IPS_REPORT_FILE)
 
 
-def get_test_ips_info(test_pcap_file):
+def get_test_ips_info(test_pcap_file, is_nat=False):
     """
     获取测试集中每个ip的domain tf-idf 以及每个ip每个domain的出现时间(以s为单位)
     :return:
     """
-    all_iot_domains_idf = get_jsonful_from_mongodb("domains_knowledge", sub_key="idf")
+    if is_nat:
+        random_ips_num = 5
+        random_ips = ["random" + str(i) for i in range(1, random_ips_num + 1)]
+        raw_ips_devices_info = load_json(test_pcap_file.replace(".pcap", ".json"))
+        nat_ips_devices_info = dict()
+        raw_ip_map_nat_ip = dict()
+        for raw_ip, devices_info in raw_ips_devices_info.items():
+            random_ip = random_ips[random.randint(0, random_ips_num - 1)]
+            raw_ip_map_nat_ip[raw_ip] = random_ip
+            if random_ip not in nat_ips_devices_info.keys():
+                nat_ips_devices_info[random_ip] = list()
+            for device_info in devices_info:
+                nat_ips_devices_info[random_ip].append(device_info)
+    ips_domains_windows = dict()
+    all_iot_domains_idf = get_jsonful_from_mongodb("new_domains_knowledge", sub_key="idf")
     top_domains = load_json(TOP_DOMAINS_FILE)
     other_excluded_domains = load_json(OTHER_EXCLUDED_DOMAINS_FILE)
     excluded_domains = list()
@@ -453,65 +470,54 @@ def get_test_ips_info(test_pcap_file):
     excluded_domains.extend(other_excluded_domains)
     train_clients_num = get_val_from_mongodb("mix", val_name="train_clients_num")
     test_ips_info = dict()
-    test_ips_domains_pkts_time = dict()  # 另外存储了文件名
-    ips_domains_pkts_time = dict()  # 每个ip每个domain的出现时间(以s为单位)
+    # test_ips_domains_pkts_time = dict()  # 另外存储了文件名
+    # ips_domains_pkts_time = dict()  # 每个ip每个domain的出现时间(以s为单位)
     ips_domains_tfidf = dict()
-    ips_first_window = dict()
-    ips_last_window = dict()
-    ips_domains_last_window = dict()
     pkts = rdpcap(test_pcap_file)
     start_time = pkts[0].time
-    window_index = 0
     for i, pkt in enumerate(pkts):
         if sc.IP in pkt:
             ip = pkt[sc.IP].dst
         else:
             ip = pkt[sc.IPv6].dst
-        domain = str(pkt[sc.DNS].qd.qname, encoding=ENCODING_METHOD)[:-1]
-        window_index = math.floor((pkt.time - start_time) / WINDOW_SECONDS) + 1
         if ip in BLACK_IPS:
             continue
+        if is_nat:
+            # ip = NAT_IP  # 融合的ip，视为NAT
+            ip = raw_ip_map_nat_ip[ip]  # 将raw_ip映射到random_ip
+        domain = str(pkt[sc.DNS].qd.qname, encoding=ENCODING_METHOD)[:-1]
+        window_index = math.floor((pkt.time - start_time) / WINDOW_SECONDS) + 1
         if is_excluded_domain(domain, excluded_domains, EXCLUDED_DOMAINS_SUFFIX):
             continue
-        domain = erase_protocol_prefix(domain)
-        if ip not in ips_domains_tfidf.keys():
-            ips_domains_tfidf[ip] = {
-                domain: 1
-            }
-            ips_first_window[ip] = window_index
-            ips_domains_last_window[ip] = dict()
-        elif domain not in ips_domains_tfidf[ip].keys():
-            ips_domains_tfidf[ip][domain] = 1
-        elif window_index > ips_domains_last_window[ip][domain]:
-            ips_domains_tfidf[ip][domain] += 1
-        if ip not in ips_domains_pkts_time.keys():
-            ips_domains_pkts_time[ip] = {
-                domain: [int(pkt.time - start_time)]
-            }
-        elif domain not in ips_domains_pkts_time[ip].keys():
-            ips_domains_pkts_time[ip][domain] = [int(pkt.time - start_time)]
-        else:
-            ips_domains_pkts_time[ip][domain].append(int(pkt.time - start_time))
-        ips_last_window[ip] = window_index
-        ips_domains_last_window[ip][domain] = window_index
-    for ip, device_fp in ips_domains_tfidf.items():
-        for domain, counts in device_fp.items():
-            ips_domains_tfidf[ip][domain] = counts / (
-                    ips_last_window[ip] - ips_first_window[ip] + 1) * all_iot_domains_idf.get(domain, math.log(
+        domain = erase_protocol_prefix(domain).lower()  # 统一域名格式
+        if ip not in ips_domains_windows.keys():
+            ips_domains_windows[ip] = dict()
+        if domain not in ips_domains_windows[ip]:
+            ips_domains_windows[ip][domain] = set()
+        ips_domains_windows[ip][domain].add(window_index)
+    for ip, domains_windows in ips_domains_windows.items():
+        ips_domains_tfidf[ip] = dict()
+        for domain, windows in domains_windows.items():
+            ips_domains_tfidf[ip][domain] = len(windows) / TEST_WINDOWS_NUM * all_iot_domains_idf.get(domain, math.log(
                 (1 + train_clients_num / (1 + 0)), 2))
             # 若测试ip中某domain在domain库里不存在，则idf仍应按照标准的算法进行计算
     for ip in ips_domains_tfidf.keys():
         ips_domains_tfidf[ip] = get_sorted_dict(ips_domains_tfidf[ip], compared_target="value")
     test_ips_info["pcap"] = test_pcap_file
-    test_ips_info["window_seconds"] = WINDOW_SECONDS
-    test_ips_info["nt"] = window_index
-    test_ips_info["ips_domains_tfidf"] = get_sorted_dict_by_ip(ips_domains_tfidf)
+    if is_nat:
+        test_ips_info["ips_domains_tfidf"] = get_sorted_dict(ips_domains_tfidf, reverse=False)
+    else:
+        test_ips_info["ips_domains_tfidf"] = get_sorted_dict_by_ip(ips_domains_tfidf)
 
-    test_ips_domains_pkts_time["pcap"] = test_pcap_file
-    test_ips_domains_pkts_time["ips_domains_pkts_time"] = get_sorted_dict_by_ip(ips_domains_pkts_time)
+    # test_ips_domains_pkts_time["pcap"] = test_pcap_file
+    # test_ips_domains_pkts_time["ips_domains_pkts_time"] = get_sorted_dict_by_ip(ips_domains_pkts_time)
 
     store_json(test_ips_info, TEST_IPS_INFO_FILE)
-    store_json(test_ips_domains_pkts_time, TEST_IPS_DOMAINS_PKTS_TIME_FILE)
+    # store_json(test_ips_domains_pkts_time, TEST_IPS_DOMAINS_PKTS_TIME_FILE)
+
+    # 同时保存新的NAT描述文件
+    if is_nat:
+        store_json(get_sorted_dict(nat_ips_devices_info, reverse=False), test_pcap_file.replace(".pcap", "_NAT.json"))
 
 
 def get_all_google(domains, vendors):
@@ -559,40 +565,45 @@ def get_test_ips_devices_info(old_train_ips_device_info_file):
     store_json(test_ips_devices_info, TEST_IPS_DEVICES_INFO_FILE)
 
 
-def get_average_performance():
-    devices_threshold = get_mongodb_devices_threshold()
-    precision_sum = 0
-    recall_sum = 0
-    f05_sum = 0
-    f1_sum = 0
-    f2_sum = 0
-    device_count = 0
-    for device, performance in devices_threshold.items():
-        if device not in ["Chinese Webcam", "Insteon Hub", "Koogeek Light bulb", "Piper NV", "Wink Hub"]:
-            device_count += 1
-            precision_sum += performance["precision"]
-            recall_sum += performance["recall"]
-            f05_sum += performance["F0.5"]
-            f1_sum += performance["F1"]
-            f2_sum += performance["F2"]
-    return precision_sum / device_count, recall_sum / device_count, f05_sum / device_count, f1_sum / device_count, f2_sum / device_count
-
-
 @calc_method_time
 def main():
-    # 1. 测试设备信息test_ips_devices_info的准备
-    # get_test_ips_devices_info(TEST_IPS_DEVICES_INFO_FILE)  # 修正测试设备信息
+    global TEST_TARGET_NAME, TEST_PCAP_FILE, TEST_IPS_DEVICES_INFO_FILE, TEST_RESULT_FOLDER_NAME, ALL_THETAS_PERFORMANCE_FILE, TEST_IPS_DOMAINS_REGULARITY_SCORE_FILE, TEST_IPS_DOMAINS_PKTS_TIME_FILE, TEST_IPS_OTHER_DOMAINS_FILE, TEST_IPS_PERFORMANCE_FILE, TEST_IPS_POSSIBLE_DEVICES_FILE, TEST_IPS_POSSIBLE_DEVICES_SIMILARITY_FILE, TEST_IPS_REPORT_FILE, TEST_IPS_INFO_FILE
+    for file_index in range(TEST_FILE_LOW, TEST_FILE_HIGH + 1):
+        # 0. 修正常量
+        gen_nat = True
+        if gen_nat:
+            TEST_TARGET_NAME = TEST_PREFIX + str(file_index) + "_NAT"
+        else:
+            TEST_TARGET_NAME = TEST_PREFIX + str(file_index)
+        TEST_PCAP_FILE = os.path.join(TEST_DATA_FOLDER_NAME, TEST_TARGET_NAME.replace("_NAT", "") + ".pcap")
+        TEST_IPS_DEVICES_INFO_FILE = os.path.join(TEST_DATA_FOLDER_NAME, TEST_TARGET_NAME + ".json")
+        # res文件夹中的文件，存放程序处理后的结果
+        TEST_RESULT_FOLDER_NAME = os.path.join("test_result", "finder", TEST_TARGET_NAME)
+        ALL_THETAS_PERFORMANCE_FILE = os.path.join(TEST_RESULT_FOLDER_NAME, "all_thetas_performance.json")
+        TEST_IPS_DOMAINS_REGULARITY_SCORE_FILE = os.path.join(TEST_RESULT_FOLDER_NAME,
+                                                              "test_ips_domains_regularity_score.json")
+        TEST_IPS_DOMAINS_PKTS_TIME_FILE = os.path.join(TEST_RESULT_FOLDER_NAME, "test_ips_domains_pkts_time.json")
+        TEST_IPS_OTHER_DOMAINS_FILE = os.path.join(TEST_RESULT_FOLDER_NAME, "test_ips_other_domains.json")
+        TEST_IPS_PERFORMANCE_FILE = os.path.join(TEST_RESULT_FOLDER_NAME, "test_ips_performance.json")
+        TEST_IPS_POSSIBLE_DEVICES_FILE = os.path.join(TEST_RESULT_FOLDER_NAME, "test_ips_possible_devices.json")
+        TEST_IPS_POSSIBLE_DEVICES_SIMILARITY_FILE = os.path.join(TEST_RESULT_FOLDER_NAME,
+                                                                 "test_ips_possible_devices_similarity.json")
+        TEST_IPS_REPORT_FILE = os.path.join(TEST_RESULT_FOLDER_NAME, "test_ips_report.json")
+        TEST_IPS_INFO_FILE = os.path.join(TEST_RESULT_FOLDER_NAME, "test_ips_info.json")
 
-    # 2. 创建好测试结果文件的文件夹
-    # mkdir_if_not_exist(TEST_RESULT_FOLDER_NAME)
+        # 1. 测试设备信息test_ips_devices_info的准备
+        # get_test_ips_devices_info(TEST_IPS_DEVICES_INFO_FILE)  # 修正测试设备信息
 
-    # 3. 分析测试pcap
-    # get_test_ips_info(TEST_PCAP_FILE)  # 获取测试集中每个ip的domain tf-idf
-    # get_test_ips_possible_devices()  # 对测试集中每个ip查询的domain，去最佳域名集寻找到可能匹配的设备，得到每个ip可能匹配的设备
-    # get_test_ips_possible_devices_similarity()  # 得到测试集中每个ip和其可能匹配的设备间的tf-idf相似度
-    #
-    # 4. 进一步分析type和vendor，并生成报告
-    # get_test_ips_report(verify=True)  # 获取测试ip的报告
+        # 2. 创建好测试结果文件的文件夹
+        mkdir_if_not_exist(os.path.join(TEST_RESULT_FOLDER_NAME))
+
+        # 3. 分析测试pcap
+        get_test_ips_info(TEST_PCAP_FILE, is_nat=gen_nat)  # 获取测试集中每个ip的domain tf-idf
+        get_test_ips_possible_devices()  # 对测试集中每个ip查询的domain，去最佳域名集寻找到可能匹配的设备，得到每个ip可能匹配的设备
+        get_test_ips_possible_devices_similarity()  # 得到测试集中每个ip和其可能匹配的设备间的tf-idf相似度
+
+        # 4. 进一步分析type和vendor，并生成报告
+        # get_test_ips_report(verify=True)  # 获取测试ip的报告
     pass
 
 

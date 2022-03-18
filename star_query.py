@@ -26,9 +26,9 @@ def get_mongodb_collections():
     google_col = iot_db["google"]
     website_col = iot_db["website"]
     mix_col = iot_db["mix"]
-    domains_knowledge_col = iot_db["domains_knowledge"]
-    devices_knowledge_col = iot_db["devices_knowledge"]
-    great_domains_col = iot_db["great_domains"]
+    domains_knowledge_col = iot_db["new_domains_knowledge"]
+    devices_knowledge_col = iot_db["new_devices_knowledge"]
+    great_domains_col = iot_db["new_great_domains"]
     urls_col = iot_db["urls"]
     return old_google_col, linux_whois_col, google_col, website_col, mix_col, domains_knowledge_col, devices_knowledge_col, great_domains_col, urls_col
 
@@ -36,9 +36,9 @@ def get_mongodb_collections():
 OLD_GOOGLE_COL, LINUX_WHOIS_COL, GOOGLE_COL, WEBSITE_COL, MIX_COL, DOMAINS_KNOWLEDGE_COL, DEVICES_KNOWLEDGE_COL, GREAT_DOMAINS_COL, URLS_COL = get_mongodb_collections()
 
 COLLECTION_MAPPING = {
-    "great_domains": {"collection": GREAT_DOMAINS_COL, "primary_key": "domain"},
-    "devices_knowledge": {"collection": DEVICES_KNOWLEDGE_COL, "primary_key": "device"},
-    "domains_knowledge": {"collection": DOMAINS_KNOWLEDGE_COL, "primary_key": "domain"},
+    "new_great_domains": {"collection": GREAT_DOMAINS_COL, "primary_key": "domain"},
+    "new_devices_knowledge": {"collection": DEVICES_KNOWLEDGE_COL, "primary_key": "device"},
+    "new_domains_knowledge": {"collection": DOMAINS_KNOWLEDGE_COL, "primary_key": "domain"},
     "google": {"collection": GOOGLE_COL, "primary_key": "query_info"},
     "linux_whois": {"collection": LINUX_WHOIS_COL, "primary_key": "domain"},
     "mix": {"collection": MIX_COL},
@@ -65,8 +65,9 @@ def guess_domain_vendor_by_whois(merged_domain):
     :return:
     """
     linux_whois_dict = LINUX_WHOIS_COL.find_one({"domain": merged_domain})
-    if linux_whois_dict is None or linux_whois_dict["whois_info"] is None:
-        # 如果linux_whois中没有该domain的whois信息或者由于之前被拒绝连接导致记录的whois_info为空
+    # if linux_whois_dict is None or linux_whois_dict["whois_info"] is None:
+    # 如果linux_whois中没有该domain的whois信息或者由于之前被拒绝连接导致记录的whois_info为空
+    if linux_whois_dict is None:
         linux_whois_dict = call_linux_whois(merged_domain)
         if type(linux_whois_dict["whois_info"]) is dict:
             vendor = linux_whois_dict["whois_info"].get("Registrant Organization")
@@ -74,14 +75,14 @@ def guess_domain_vendor_by_whois(merged_domain):
                 vendor = linux_whois_dict["whois_info"].get("Registrant")
         else:
             vendor = None
-        if vendor in WHOIS_REGISTRANT_BLACK_LIST:  # 需要排除掉一些保护隐私的REGISTRANT特别信息
-            vendor = None
         linux_whois_dict["vendor"] = vendor
         LINUX_WHOIS_COL.update_one({"domain": merged_domain}, {
             "$set": {"whois_info": linux_whois_dict["whois_info"], "vendor": linux_whois_dict["vendor"]}},
                                    upsert=True)  # 修改为更新，如果不存在，则插入
     else:
         vendor = linux_whois_dict["vendor"]
+    if vendor in WHOIS_REGISTRANT_BLACK_LIST:  # 需要排除掉一些保护隐私的REGISTRANT特别信息
+        vendor = None
     return vendor
 
 
@@ -396,7 +397,7 @@ def visit_url(url):
             tags_data = None
             if r.status_code == 200:
                 tags_data = extract_html_tags_data(r.text)
-            if len(r.text) >= 5*1024*1024:
+            if len(r.text) >= 5 * 1024 * 1024:
                 raise Exception("DocumentTooLarge: BSON document too large")
             url_dict = {
                 "url": url,
@@ -489,6 +490,12 @@ def get_mongodb_devices_threshold():
     return devices_threshold
 
 
+def test_mongodb():
+    domain = "test"
+    val = {"idf": 1, "devices_num": 2}
+    DOMAINS_KNOWLEDGE_COL.update_one({"domain": domain}, {"$set": val}, upsert=True)
+
+
 def main():
     # use_linux_whois()
     # res = call_linux_whois("tenda.com.cn")
@@ -503,7 +510,7 @@ def main():
     # visit_domain("belkin.com")
     # visit_domains()
     # extract_html_tags_data("belkin.com")
-    # devices_knowledge_dict = get_jsonful_from_mongodb("devices_knowledge", "domains_tfidf")
+    # devices_knowledge_dict = get_jsonful_from_mongodb(DEVICES_KNOWLEDGE_COL_NAME, "domains_tfidf")
     # store_json(devices_knowledge_dict, "devices_knowledge_dict.json")
     # tmp = get_jsonful_from_mongodb("great_domains", sub_key="devices")
     # store_json(tmp, "tmp.json")
@@ -511,6 +518,7 @@ def main():
     # visit_google_urls()
     # direct_visit_url("https://www.google.com.hk/url?q=https://www.reddit.com/r/privacy/comments/3aby4d/a_few_questions_on_how_to_get_rid_of_googleapiscom/")
     # delete_train_knowledge()
+    test_mongodb()
     pass
 
 

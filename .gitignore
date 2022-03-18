@@ -3,13 +3,11 @@
 .pytest_cache
 .vscode
 __pycache__
-all_result
-data
+logs
+train_data
+train_result
 label_data
 label_result
-logs
 test_data
 test_result
-train_data
-
-beautiful soup
+all_result

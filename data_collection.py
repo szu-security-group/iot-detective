@@ -1,4 +1,3 @@
-from utils import *
 from star_query import *
 
 
@@ -14,7 +13,7 @@ def collect_types():
     collected_type = set()
     collected_type.update(feng_paper_types)
     collected_type.update(my_types)
-    devices_type = get_jsonful_from_mongodb("devices_knowledge", "type")
+    devices_type = get_jsonful_from_mongodb(DEVICES_KNOWLEDGE_COL_NAME, "type")
     for device, types in devices_type.items():
         for one_type in types.split(", "):
             collected_type.add(one_type)
@@ -36,7 +35,7 @@ def collect_vendors():
     :return:
     """
     collected_vendors = set()
-    devices_vendors = get_jsonful_from_mongodb("devices_knowledge", "vendor")
+    devices_vendors = get_jsonful_from_mongodb(DEVICES_KNOWLEDGE_COL_NAME, "vendor")
     for device, type in devices_vendors.items():
         collected_vendors.add(type)
     store_json({"vendors_list": sorted(list(collected_vendors), reverse=False)}, GLOBAL_VENDORS_FILE)

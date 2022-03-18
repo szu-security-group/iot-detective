@@ -1,0 +1,84 @@
+{
+    "types_list": [
+        "access point",
+        "alarm system",
+        "baby monitor",
+        "bell",
+        "blood pressure meter",
+        "bulb",
+        "cam",
+        "camera",
+        "copier",
+        "crockpot",
+        "digital media player",
+        "diskstation",
+        "dollbell camera",
+        "doorbell",
+        "dvr",
+        "game machine",
+        "garage door opener",
+        "gateway",
+        "hub",
+        "ipcam",
+        "link",
+        "media player",
+        "microconsole",
+        "modem",
+        "motion sensor",
+        "netcam",
+        "nvr",
+        "nvs",
+        "picture frame",
+        "plug",
+        "printer",
+        "rackstation",
+        "router",
+        "scale",
+        "scanner",
+        "set-top box",
+        "sleep sensor",
+        "smart sprinkler controller",
+        "smart things",
+        "smoke alarm",
+        "speaker",
+        "storage server",
+        "switch",
+        "switches",
+        "television",
+        "thermostat",
+        "tv",
+        "tv soundbar",
+        "vacuum",
+        "video calling equipment",
+        "video encoder",
+        "video recorder",
+        "video server",
+        "weather station",
+        "xbox",
+        "z-wave home controller Kit"
+    ],
+    "redundant_type_dict": {
+        "bell": [
+            "dollbell camera",
+            "doorbell"
+        ],
+        "cam": [
+            "camera",
+            "dollbell camera",
+            "ipcam",
+            "netcam"
+        ],
+        "camera": [
+            "dollbell camera"
+        ],
+        "media player": [
+            "digital media player"
+        ],
+        "switch": [
+            "switches"
+        ],
+        "tv": [
+            "tv soundbar"
+        ]
+    }
+}

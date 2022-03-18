@@ -217,14 +217,6 @@ def cal_rate(true_devices_ip, test_devices_result, theta):
     return [tpr, fpr, tnr, fnr]
 
 
-# def idf(domain, devices_fp):
-#     domain_devices_nums = 0
-#     for device_fp in devices_fp.values():
-#         if domain in device_fp.keys():
-#             domain_devices_nums += 1
-#     return math.log(1 + (len(devices_fp) / (1 + domain_devices_nums)))
-
-
 def old_similarity(tfidf_a, tfidf_b):
     vector_a = []
     vector_b = []

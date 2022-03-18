@@ -154,7 +154,7 @@ def get_test_ips_possible_devices():
     :return:
     """
     ips_domains_tfidf = load_json(LABEL_IPS_INFO_FILE, "ips_domains_tfidf")
-    devices_great_domains_to_devices = get_jsonful_from_mongodb("great_domains", sub_key="devices")
+    devices_great_domains_to_devices = get_jsonful_from_mongodb("new_great_domains", sub_key="devices")
     test_ips_possible_devices = dict()
     for ip, domains_tfidf in ips_domains_tfidf.items():
         ip_possible_devices_set = set()
@@ -171,8 +171,8 @@ def get_test_ips_possible_devices_similarity():
     得到测试集中每个ip和其可能匹配的设备间的tf-idf相似度
     :return:
     """
-    devices_domains_tfidf = get_jsonful_from_mongodb("devices_knowledge", "domains_tfidf")
-    devices_domains_tfidf_vector_length = get_jsonful_from_mongodb("devices_knowledge", "tfidf_vector_length")
+    devices_domains_tfidf = get_jsonful_from_mongodb(DEVICES_KNOWLEDGE_COL_NAME, "domains_tfidf")
+    devices_domains_tfidf_vector_length = get_jsonful_from_mongodb(DEVICES_KNOWLEDGE_COL_NAME, "tfidf_vector_length")
     ips_domains_tfidf = load_json(LABEL_IPS_INFO_FILE, "ips_domains_tfidf")
     test_ips_possible_devices = load_json(LABEL_IPS_POSSIBLE_DEVICES_FILE)
     test_ips_possible_devices_similarity = dict()
@@ -456,7 +456,8 @@ def get_test_ips_info(test_pcap_file, is_nat=False):
     将多个ip融合到一个新的ip"192.168.0.255"中。获取测试集中每个ip的domain tf-idf 以及每个ip每个domain的出现时间(以s为单位)
     :return:
     """
-    all_iot_domains_idf = get_jsonful_from_mongodb("domains_knowledge", sub_key="idf")
+    ips_domains_windows = dict()
+    all_iot_domains_idf = get_jsonful_from_mongodb("new_domains_knowledge", sub_key="idf")
     top_domains = load_json(TOP_DOMAINS_FILE)
     other_excluded_domains = load_json(OTHER_EXCLUDED_DOMAINS_FILE)
     excluded_domains = list()
@@ -464,67 +465,46 @@ def get_test_ips_info(test_pcap_file, is_nat=False):
     excluded_domains.extend(other_excluded_domains)
     train_clients_num = get_val_from_mongodb("mix", val_name="train_clients_num")
     test_ips_info = dict()
-    test_ips_domains_pkts_time = dict()  # 另外存储了文件名
-    ips_domains_pkts_time = dict()  # 每个ip每个domain的出现时间(以s为单位)
+    # test_ips_domains_pkts_time = dict()  # 另外存储了文件名
+    # ips_domains_pkts_time = dict()  # 每个ip每个domain的出现时间(以s为单位)
     ips_domains_tfidf = dict()
-    ips_first_window = dict()
-    ips_last_window = dict()
-    ips_domains_last_window = dict()
     pkts = rdpcap(test_pcap_file)
     start_time = pkts[0].time
-    window_index = 0
     for i, pkt in enumerate(pkts):
         if sc.IP in pkt:
             ip = pkt[sc.IP].dst
         else:
             ip = pkt[sc.IPv6].dst
+        if ip in BLACK_IPS:
+            continue
         if is_nat:
             ip = NAT_IP  # 融合的ip，视为NAT
         domain = str(pkt[sc.DNS].qd.qname, encoding=ENCODING_METHOD)[:-1]
         window_index = math.floor((pkt.time - start_time) / WINDOW_SECONDS) + 1
-        if ip in BLACK_IPS:
-            continue
         if is_excluded_domain(domain, excluded_domains, EXCLUDED_DOMAINS_SUFFIX):
             continue
-        domain = erase_protocol_prefix(domain)
-        if ip not in ips_domains_tfidf.keys():
-            ips_domains_tfidf[ip] = {
-                domain: 1
-            }
-            ips_first_window[ip] = window_index
-            ips_domains_last_window[ip] = dict()
-        elif domain not in ips_domains_tfidf[ip].keys():
-            ips_domains_tfidf[ip][domain] = 1
-        elif window_index > ips_domains_last_window[ip][domain]:
-            ips_domains_tfidf[ip][domain] += 1
-        if ip not in ips_domains_pkts_time.keys():
-            ips_domains_pkts_time[ip] = {
-                domain: [int(pkt.time - start_time)]
-            }
-        elif domain not in ips_domains_pkts_time[ip].keys():
-            ips_domains_pkts_time[ip][domain] = [int(pkt.time - start_time)]
-        else:
-            ips_domains_pkts_time[ip][domain].append(int(pkt.time - start_time))
-        ips_last_window[ip] = window_index
-        ips_domains_last_window[ip][domain] = window_index
-    for ip, device_fp in ips_domains_tfidf.items():
-        for domain, counts in device_fp.items():
-            ips_domains_tfidf[ip][domain] = counts / (
-                    ips_last_window[ip] - ips_first_window[ip] + 1) * all_iot_domains_idf.get(domain, math.log(
+        domain = erase_protocol_prefix(domain).lower()  # 统一域名格式
+        if ip not in ips_domains_windows.keys():
+            ips_domains_windows[ip] = dict()
+        if domain not in ips_domains_windows[ip]:
+            ips_domains_windows[ip][domain] = set()
+        ips_domains_windows[ip][domain].add(window_index)
+    for ip, domains_windows in ips_domains_windows.items():
+        ips_domains_tfidf[ip] = dict()
+        for domain, windows in domains_windows.items():
+            ips_domains_tfidf[ip][domain] = len(windows) / LABEL_WINDOWS_NUM * all_iot_domains_idf.get(domain, math.log(
                 (1 + train_clients_num / (1 + 0)), 2))
             # 若测试ip中某domain在domain库里不存在，则idf仍应按照标准的算法进行计算
     for ip in ips_domains_tfidf.keys():
         ips_domains_tfidf[ip] = get_sorted_dict(ips_domains_tfidf[ip], compared_target="value")
     test_ips_info["pcap"] = test_pcap_file
-    test_ips_info["window_seconds"] = WINDOW_SECONDS
-    test_ips_info["nt"] = window_index
     test_ips_info["ips_domains_tfidf"] = get_sorted_dict_by_ip(ips_domains_tfidf)
 
-    test_ips_domains_pkts_time["pcap"] = test_pcap_file
-    test_ips_domains_pkts_time["ips_domains_pkts_time"] = get_sorted_dict_by_ip(ips_domains_pkts_time)
+    # test_ips_domains_pkts_time["pcap"] = test_pcap_file
+    # test_ips_domains_pkts_time["ips_domains_pkts_time"] = get_sorted_dict_by_ip(ips_domains_pkts_time)
 
     store_json(test_ips_info, LABEL_IPS_INFO_FILE)
-    store_json(test_ips_domains_pkts_time, LABEL_IPS_DOMAINS_PKTS_TIME_FILE)
+    # store_json(test_ips_domains_pkts_time, LABEL_IPS_DOMAINS_PKTS_TIME_FILE)
 
 
 def get_all_google(domains, vendors):
@@ -582,7 +562,7 @@ def mix_test_ips_devices_info():
     for ip, devices_info in test_ips_devices_info.items():
         for device_info in devices_info:
             test_nat_ip_devices_info[NAT_IP].append(device_info)
-    store_json(test_nat_ip_devices_info, os.path.join(LABEL_DATA_FOLDER_NAME, "finder_09_NAT" + ".json"))
+    store_json(test_nat_ip_devices_info, os.path.join(LABEL_DATA_FOLDER_NAME, "finder_2019_09_NAT" + ".json"))
 
 
 def get_devices_thetas_performance():
@@ -590,6 +570,7 @@ def get_devices_thetas_performance():
     获取每个设备在各个阈值下的表现，从而挑选最好的阈值
     :return:
     """
+    LABEL_RESULT_FOLDER_NAME = os.path.join("label_result", "finder")
     devices_list = get_devices_list(TOTAL_IPS_DEVICES_INFO_FILE)
     devices_thetas_performance = dict()
     for device in devices_list:
@@ -603,8 +584,8 @@ def get_devices_thetas_performance():
             }
     # 先得到某device在所有的测试样本中出现的ip数
     devices_appearance_num = dict()
-    for file_index in range(LABEL_FILE_LOW, LABEL_FILE_HIGH + 1):
-        test_ips_devices_info_file = os.path.join(LABEL_DATA_FOLDER_NAME, "finder_08_" + str(file_index) + ".json")
+    for file_index in LABEL_DAYS:
+        test_ips_devices_info_file = os.path.join(LABEL_DATA_FOLDER_NAME, "finder_2019_08_" + str(file_index) + ".json")
         test_ips_devices_info = load_json(test_ips_devices_info_file)
         for ip, devices_info in test_ips_devices_info.items():
             for device_info in devices_info:
@@ -614,15 +595,19 @@ def get_devices_thetas_performance():
     # 得出结果
     for theta in np.arange(THETA_LOW, THETA_HIGH + THETA_STEP, THETA_STEP):
         theta_str = str(theta)[:THETA_STR_LENGTH]
-        for file_index in range(LABEL_FILE_LOW, LABEL_FILE_HIGH + 1):
-            test_ips_devices_info_file = os.path.join(LABEL_DATA_FOLDER_NAME, "finder_08_" + str(file_index) + ".json")
+        for file_index in LABEL_DAYS:
+            test_ips_devices_info_file = os.path.join(LABEL_DATA_FOLDER_NAME,
+                                                      "finder_2019_08_" + str(file_index) + ".json")
             test_ips_devices_info = load_json(test_ips_devices_info_file)
-            file_name = os.path.join(LABEL_RESULT_FOLDER_NAME, "finder_08_" + str(file_index),
+            file_name = os.path.join(LABEL_RESULT_FOLDER_NAME, "finder_2019_08_" + str(file_index),
                                      "test_ips_possible_devices_similarity.json")
             test_ips_possible_devices_similarity = load_json(file_name)
             for test_ip, possible_devices_similarity in test_ips_possible_devices_similarity.items():
                 test_ip_devices = [test_ips_devices_info[test_ip][i]["device"] for i in
                                    range(len(test_ips_devices_info[test_ip]))]
+                # 对possible_devices_similarity进行处理，取每种设备多个实例中的最高作为判定
+                # for possible_device, similarity in possible_devices_similarity.items():
+                possible_devices_similarity = get_highest_val_from_instances(possible_devices_similarity)
                 for possible_device, similarity in possible_devices_similarity.items():
                     if similarity >= (theta - 0.0000000000000010):
                         if possible_device in test_ip_devices:
@@ -664,45 +649,6 @@ def get_devices_thetas_performance():
         store_json(devices_thetas_performance[device], device_thetas_performance_filename)
 
 
-def draw_devices_performance():
-    """
-    根据各个阈值对应的分数，画出曲线
-    :return:
-    """
-    targets = ["precision", "recall", "F2"]
-    # targets = ["精确率", "查全率", "F2分数"]
-    line_patterns = ['r-', 'g--', 'b:']
-    # devices_list = get_devices_list(TOTAL_IPS_DEVICES_INFO_FILE)
-    devices_list = ["Apple HomePod", "Google Home Mini"]
-    for device in devices_list:
-        for i, target in enumerate(targets):
-            device_thetas_performance_filename = os.path.join(DEVICES_PERFORMANCE_FOLDER_NAME, device + ".json")
-            device_thetas_performance = load_json(device_thetas_performance_filename)
-            thetas = list()
-            scores = list()
-            for theta_index, theta_str in enumerate(device_thetas_performance.keys()):
-                if float(theta_str[:THETA_STR_LENGTH]) >= 0.6:
-                    thetas.append(float(theta_str[:THETA_STR_LENGTH]))
-                    scores.append(device_thetas_performance[theta_str][target])
-            plt.title(device)
-            # plt.xlabel("threshold")
-            plt.xlabel("识别阈值")
-            max_score = max(scores)
-            max_index = scores.index(max_score)
-            max_theta = thetas[max_index]
-            show_max = "(" + str(max_theta) + ", " + str(max_score)[:5] + ")"
-            plt.annotate(show_max, xytext=(max_theta, max_score), xy=(max_theta, max_score), )
-            # plt.plot(thetas, scores, line_patterns[i], label=target)
-            plt.plot(thetas, scores, line_patterns[i], label=LANGUAGE_MAP[target])
-        plt.legend()
-        plt.tight_layout()
-        fig_path = os.path.join(DEVICES_PERFORMANCE_FOLDER_NAME, device + ".png")
-        plt.savefig(fig_path)
-        fig_path = os.path.join(DEVICES_PERFORMANCE_FOLDER_NAME, device + ".svg")
-        plt.savefig(fig_path, format='svg')
-        plt.show()
-
-
 def get_devices_best_theta_performance():
     """
     获取设备最优阈值下的表现，其实只有阈值会用到在之后的识别中，而其它表现只是辅助看而已
@@ -728,47 +674,51 @@ def get_devices_best_theta_performance():
     # store_json(devices_best_theta_performance, DEVICES_BEST_THETA_PERFORMANCE_FILE)
     # 将最优阈值写入到MongoDB中的DEVICES_KNOWLEDGE_COL中的阈值中去
     for device in devices_list:
-        DEVICES_KNOWLEDGE_COL.update_one({"device": device}, {"$set": {"threshold": devices_best_theta_performance[device]["theta"]}}, upsert=True)
+        for i in TRAIN_DAYS:
+            DEVICES_KNOWLEDGE_COL.update_one({"device": device + "_" + str(i)},
+                                             {"$set": {"threshold": devices_best_theta_performance[device]["theta"]}},
+                                             upsert=False)
+    logger.info("更新设备阈值成功")
     return devices_best_theta_performance
 
 
 @calc_method_time
 def main():
-    # global LABEL_TARGET_NAME, LABEL_PCAP_FILE, LABEL_IPS_DEVICES_INFO_FILE, LABEL_RESULT_FOLDER_NAME, ALL_THETAS_PERFORMANCE_FILE, LABEL_IPS_DOMAINS_REGULARITY_SCORE_FILE, LABEL_IPS_DOMAINS_PKTS_TIME_FILE, LABEL_IPS_OTHER_DOMAINS_FILE, LABEL_IPS_PERFORMANCE_FILE, LABEL_IPS_POSSIBLE_DEVICES_FILE, LABEL_IPS_POSSIBLE_DEVICES_SIMILARITY_FILE, LABEL_IPS_REPORT_FILE, LABEL_IPS_INFO_FILE
-    # for i in range(LABEL_FILE_LOW, LABEL_FILE_HIGH + 1):
-    #     # 0. 修正常量
-    #     # LABEL_TARGET_NAME = "finder_08_" + str(i)
-    #     LABEL_TARGET_NAME = "finder_08_" + str(i) + "_NAT"
-    #     LABEL_PCAP_FILE = os.path.join(LABEL_DATA_FOLDER_NAME, LABEL_TARGET_NAME.replace("_NAT", "") + ".pcap")
-    #     LABEL_IPS_DEVICES_INFO_FILE = os.path.join(LABEL_DATA_FOLDER_NAME, LABEL_TARGET_NAME + ".json")
-    #     # res文件夹中的文件，存放程序处理后的结果
-    #     LABEL_RESULT_FOLDER_NAME = os.path.join("label_result", LABEL_TARGET_NAME)
-    #     ALL_THETAS_PERFORMANCE_FILE = os.path.join(LABEL_RESULT_FOLDER_NAME, "all_thetas_performance.json")
-    #     LABEL_IPS_DOMAINS_REGULARITY_SCORE_FILE = os.path.join(LABEL_RESULT_FOLDER_NAME,
-    #                                                           "test_ips_domains_regularity_score.json")
-    #     LABEL_IPS_DOMAINS_PKTS_TIME_FILE = os.path.join(LABEL_RESULT_FOLDER_NAME, "test_ips_domains_pkts_time.json")
-    #     LABEL_IPS_OTHER_DOMAINS_FILE = os.path.join(LABEL_RESULT_FOLDER_NAME, "test_ips_other_domains.json")
-    #     LABEL_IPS_PERFORMANCE_FILE = os.path.join(LABEL_RESULT_FOLDER_NAME, "test_ips_performance.json")
-    #     LABEL_IPS_POSSIBLE_DEVICES_FILE = os.path.join(LABEL_RESULT_FOLDER_NAME, "test_ips_possible_devices.json")
-    #     LABEL_IPS_POSSIBLE_DEVICES_SIMILARITY_FILE = os.path.join(LABEL_RESULT_FOLDER_NAME,
-    #                                                              "test_ips_possible_devices_similarity.json")
-    #     LABEL_IPS_REPORT_FILE = os.path.join(LABEL_RESULT_FOLDER_NAME, "test_ips_report.json")
-    #     LABEL_IPS_INFO_FILE = os.path.join(LABEL_RESULT_FOLDER_NAME, "test_ips_info.json")
+    global LABEL_TARGET_NAME, LABEL_PCAP_FILE, LABEL_IPS_DEVICES_INFO_FILE, LABEL_RESULT_FOLDER_NAME, ALL_THETAS_PERFORMANCE_FILE, LABEL_IPS_DOMAINS_REGULARITY_SCORE_FILE, LABEL_IPS_DOMAINS_PKTS_TIME_FILE, LABEL_IPS_OTHER_DOMAINS_FILE, LABEL_IPS_PERFORMANCE_FILE, LABEL_IPS_POSSIBLE_DEVICES_FILE, LABEL_IPS_POSSIBLE_DEVICES_SIMILARITY_FILE, LABEL_IPS_REPORT_FILE, LABEL_IPS_INFO_FILE
+    for file_index in LABEL_DAYS:
+        # 0. 修正常量
+        LABEL_TARGET_NAME = "finder_2019_08_" + str(file_index)
+        # LABEL_TARGET_NAME = "finder_2019_08_" + str(file_index) + "_NAT"
+        LABEL_PCAP_FILE = os.path.join(LABEL_DATA_FOLDER_NAME, LABEL_TARGET_NAME + ".pcap")
+        # LABEL_PCAP_FILE = os.path.join(LABEL_DATA_FOLDER_NAME, LABEL_TARGET_NAME.replace("_NAT", "") + ".pcap")
+        LABEL_IPS_DEVICES_INFO_FILE = os.path.join(LABEL_DATA_FOLDER_NAME, LABEL_TARGET_NAME + ".json")
+        # res文件夹中的文件，存放程序处理后的结果
+        LABEL_RESULT_FOLDER_NAME = os.path.join("label_result", "finder", LABEL_TARGET_NAME)
+        ALL_THETAS_PERFORMANCE_FILE = os.path.join(LABEL_RESULT_FOLDER_NAME, "all_thetas_performance.json")
+        LABEL_IPS_DOMAINS_REGULARITY_SCORE_FILE = os.path.join(LABEL_RESULT_FOLDER_NAME,
+                                                               "test_ips_domains_regularity_score.json")
+        LABEL_IPS_DOMAINS_PKTS_TIME_FILE = os.path.join(LABEL_RESULT_FOLDER_NAME, "test_ips_domains_pkts_time.json")
+        LABEL_IPS_OTHER_DOMAINS_FILE = os.path.join(LABEL_RESULT_FOLDER_NAME, "test_ips_other_domains.json")
+        LABEL_IPS_PERFORMANCE_FILE = os.path.join(LABEL_RESULT_FOLDER_NAME, "test_ips_performance.json")
+        LABEL_IPS_POSSIBLE_DEVICES_FILE = os.path.join(LABEL_RESULT_FOLDER_NAME, "test_ips_possible_devices.json")
+        LABEL_IPS_POSSIBLE_DEVICES_SIMILARITY_FILE = os.path.join(LABEL_RESULT_FOLDER_NAME,
+                                                                  "test_ips_possible_devices_similarity.json")
+        LABEL_IPS_REPORT_FILE = os.path.join(LABEL_RESULT_FOLDER_NAME, "test_ips_report.json")
+        LABEL_IPS_INFO_FILE = os.path.join(LABEL_RESULT_FOLDER_NAME, "test_ips_info.json")
     #
     #     # 1. 测试设备信息test_ips_devices_info的准备
     #     # get_test_ips_devices_info(LABEL_IPS_DEVICES_INFO_FILE)  # 修正测试设备信息
     #
-    #     # 2. 创建好测试结果文件的文件夹
+    # 2. 创建好测试结果文件的文件夹
     #     mkdir_if_not_exist(LABEL_RESULT_FOLDER_NAME)
-    #
-    #     # 3. 分析测试pcap
-    #     # get_test_ips_info(LABEL_PCAP_FILE, is_nat=False)  # 获取测试集中每个ip的domain tf-idf，这里是每个ip对应一个设备
-    #     get_test_ips_info(LABEL_PCAP_FILE, is_nat=True)  # 获取测试集中每个ip的domain tf-idf，这里弄成NAT模式
+    # #
+    # #     # 3. 分析测试pcap
+    # #     get_test_ips_info(LABEL_PCAP_FILE, is_nat=False)  # 获取测试集中每个ip的domain tf-idf，这里是每个ip对应一个设备
+    # #     # get_test_ips_info(LABEL_PCAP_FILE, is_nat=True)  # 获取测试集中每个ip的domain tf-idf，这里弄成NAT模式
     #     get_test_ips_possible_devices()  # 对测试集中每个ip查询的domain，去最佳域名集寻找到可能匹配的设备，得到每个ip可能匹配的设备
     #     get_test_ips_possible_devices_similarity()  # 得到测试集中每个ip和其可能匹配的设备间的tf-idf相似度
 
     # get_devices_thetas_performance()
-    draw_devices_performance()  # 每个设备一张图
 
     # get_devices_best_theta_performance()
 

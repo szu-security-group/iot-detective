@@ -3,20 +3,20 @@
 # @Time    : 2021/05/14 13:55
 # @Author  : Zixing Xiao
 import json
+import math
 import socket
 import time
+from pprint import pprint
+
 import numpy as np
 import logging
 from logging import handlers
 import datetime
 import tldextract
+import scapy.all as sc
+from scapy.utils import rdpcap
 
 from constants import *
-import matplotlib as mpl
-
-# mpl.rcParams['font.sans-serif'] = ['SimHei', 'KaiTi', 'FangSong']
-# mpl.rcParams['font.size'] = 12  # 字体大小
-# mpl.rcParams['axes.unicode_minus'] = False  # 正常显示负号
 
 
 def mkdir_if_not_exist(folder_name):
@@ -26,10 +26,10 @@ def mkdir_if_not_exist(folder_name):
     :return:
     """
     if os.path.exists(folder_name):
-        print("folder name : {folder_name} has already existed.".format(folder_name=folder_name))
+        logger.info("folder name : {folder_name} has already existed.".format(folder_name=folder_name))
     else:
         os.makedirs(folder_name)
-        print("folder name : {folder_name} is created successfully.".format(folder_name=folder_name))
+        logger.info("folder name : {folder_name} is created successfully.".format(folder_name=folder_name))
 
 
 class Logger(object):
@@ -110,20 +110,21 @@ def dict2sorted_list(raw_dict, compared_name=None):
     return result
 
 
-def get_sorted_dict(raw_dict, compared_target="key", compared_name=None):
+def get_sorted_dict(raw_dict, compared_target="key", reverse=True, compared_name=None):
     """
-    若compared_name为None，按字典值从大到小进行排序
+    若compared_name为None，按字典值进行排序，默认从大到小
     否则按字典值中的compared_name进行排序
     :param compared_target:
+    :param reverse:是否从大到小
     :param raw_dict: 传入的字典
     :param compared_name: 按compared_name进行排序
     :return: 排好序的字典
     """
     mapping_pos = {"key": 0, "value": 1}
     if compared_name is None:
-        result = sorted(raw_dict.items(), key=lambda x: x[mapping_pos[compared_target]], reverse=True)
+        result = sorted(raw_dict.items(), key=lambda x: x[mapping_pos[compared_target]], reverse=reverse)
     else:
-        result = sorted(raw_dict.items(), key=lambda x: x[mapping_pos[compared_target]][compared_name], reverse=True)
+        result = sorted(raw_dict.items(), key=lambda x: x[mapping_pos[compared_target]][compared_name], reverse=reverse)
     sorted_dict = dict()
     for key, val in result:
         sorted_dict[key] = val
@@ -371,3 +372,73 @@ def get_devices_list(test_ips_devices_info_file):
         device = ip_info["device"]
         devices_list.append(device)
     return sorted(devices_list)
+
+
+def rename_file():
+    files_path = os.path.join("train_data", "finder")
+    for root, dirs, files in os.walk(files_path):
+        print(root)  # os.walk()所在目录
+        print(dirs)  # os.walk()所在目录的所有目录名
+        print(files)  # os.walk()所在目录的所有非目录文件名
+        for file in files:
+            prefix = "finder_2019_09_for6_"
+            if file.startswith(prefix):
+                file_index = file[len(prefix):len(prefix) + 5]
+                new_name = prefix + str((int(file_index) + 1)) + ".pcap"
+                os.rename(os.path.join(files_path, file), os.path.join(files_path, new_name))
+
+
+def get_ips_devices_info():
+    train_ips_device_info = load_json(TRAIN_IPS_DEVICE_INFO_FILE)
+    files_path = os.path.join("train_data", "finder")
+    for file_index in [125]:
+        file = "finder_2019_08_" + str(file_index) + ".pcap"
+        pkts = rdpcap(os.path.join(files_path, file))
+        ip_set = set()
+        for i, pkt in enumerate(pkts):
+            # 需要是ipv4
+            if sc.IP in pkt:
+                ip = pkt[sc.IP].dst
+            else:
+                ip = pkt[sc.IPv6].dst
+            if ip in BLACK_IPS:
+                continue
+            ip_set.add(ip)
+        ips_devices_info = dict()
+        for ip in ip_set:
+            ips_devices_info[ip] = [train_ips_device_info[ip]]
+        new_name = file[:-len("pcap")] + "json"
+        store_json(get_sorted_dict_by_ip(ips_devices_info), os.path.join(files_path, new_name))
+
+
+def get_highest_val_from_instances(raw_dict):
+    result_dict = dict()
+    for instance, val in raw_dict.items():
+        device = instance.split("_")[0]
+        if device not in result_dict.keys():
+            result_dict[device] = val
+        else:
+            result_dict[device] = max(result_dict[device], val)
+    return result_dict
+
+
+def get_lowest_val_from_instances(raw_dict):
+    result_dict = dict()
+    for instance, val in raw_dict.items():
+        device = instance.split("_")[0]
+        if device not in result_dict.keys():
+            result_dict[device] = val
+        else:
+            result_dict[device] = min(result_dict[device], val)
+    return result_dict
+
+
+def main():
+    rename_file()
+    # get_ips_devices_info()
+    # print(os.path.exists(os.path.join(TRAIN_RESULT_FOLDER_NAME, "finder_2019_08_1", "finder_2019_08_1.pcap"[:-len(".pcap")] + ".json")))
+    pass
+
+
+if __name__ == '__main__':
+    main()

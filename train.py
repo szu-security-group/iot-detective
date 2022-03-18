@@ -21,7 +21,7 @@ def update_great_domains():
     将测试ip和D中每个设备d进行tfidf匹配，设定阈值为θ，得到满足相似度大于θ的猜测设备集G
     :return:
     """
-    devices_knowledge_dict = get_jsonful_from_mongodb("devices_knowledge")
+    devices_knowledge_dict = get_jsonful_from_mongodb("new_devices_knowledge")
     devices_great_domains_to_devices = dict()
     # 各个IoT设备最显著的domain组成domain集
     for device, device_knowledge in devices_knowledge_dict.items():
@@ -34,28 +34,24 @@ def update_great_domains():
                 devices_great_domains_to_devices[domain] = [device]
             else:
                 devices_great_domains_to_devices[domain].append(device)
-            if great_domains_tfidf_len_square >= 0.9 * 0.9 * tfidf_vector_length * tfidf_vector_length:
+            if great_domains_tfidf_len_square >= 0.8 * 0.8 * tfidf_vector_length * tfidf_vector_length:
                 break
     for domain, devices in devices_great_domains_to_devices.items():
         GREAT_DOMAINS_COL.update_one({"domain": domain}, {"$set": {"devices": devices}}, upsert=True)
 
 
 @calc_method_time
-def get_train_info(train_cap_file, excluded_domains, specify_train_ips, train_ips=None):
+def get_ips_domains_windows(train_pcap_file, excluded_domains, specify_train_ips, train_ips=None):
     """
     获取各个ip的窗口数（第一个到最后一个DNS包期间的窗口数）及各个训练ip各个域名的出现窗口数
-    :param train_cap_file: 训练的pcap
+    :param train_pcap_file: 训练的pcap
     :param excluded_domains: 停止词，TOP100域名和其它需要排除的域名
     :param excluded_domains_suffix: 排除掉的域名后缀
     :param train_ips: 特指训练的ip
     :return: 各个ip的窗口数（第一个到最后一个DNS包期间的窗口数）及各个训练ip各个域名的出现窗口数
     """
-    train_ips_info = dict()
-    ips_domains_windows_num = dict()
-    ips_first_window = dict()
-    ips_last_window = dict()
-    ips_domains_last_window = dict()
-    pkts = rdpcap(train_cap_file)
+    ips_domains_windows = dict()
+    pkts = rdpcap(os.path.join(TRAIN_DATA_FOLDER_NAME, train_pcap_file))
     start_time = pkts[0].time
     for i, pkt in enumerate(pkts):
         # 需要是ipv4
@@ -70,26 +66,21 @@ def get_train_info(train_cap_file, excluded_domains, specify_train_ips, train_ip
         if specify_train_ips:
             if ip not in train_ips:
                 continue
-        if is_excluded_domain(domain, excluded_domains, EXCLUDED_DOMAINS_SUFFIX):
+        if is_excluded_domain(domain, excluded_domains, EXCLUDED_DOMAINS_SUFFIX):  # 过滤特定域名
             continue
-        domain = erase_protocol_prefix(domain)
-        if ip not in ips_domains_windows_num.keys():
-            ips_domains_windows_num[ip] = {
-                domain: 1
-            }
-            ips_first_window[ip] = window_index
-            ips_domains_last_window[ip] = dict()
-        elif domain not in ips_domains_windows_num[ip].keys():
-            ips_domains_windows_num[ip][domain] = 1
-        elif window_index > ips_domains_last_window[ip][domain]:
-            ips_domains_windows_num[ip][domain] += 1
-        ips_last_window[ip] = window_index
-        ips_domains_last_window[ip][domain] = window_index
-    for ip in ips_first_window.keys():
-        train_ips_info[ip] = dict()
-        train_ips_info[ip]["windows_num"] = ips_last_window[ip] - ips_first_window[ip] + 1
-        train_ips_info[ip]["domains_windows_num"] = ips_domains_windows_num[ip]
-    return train_ips_info
+        domain = erase_protocol_prefix(domain).lower()  # 统一域名格式
+        if ip not in ips_domains_windows.keys():
+            ips_domains_windows[ip] = dict()
+        if domain not in ips_domains_windows[ip]:
+            ips_domains_windows[ip][domain] = set()
+        ips_domains_windows[ip][domain].add(window_index)
+    result_ips_domains_windows = dict()
+    for ip, domains_windows in ips_domains_windows.items():
+        result_ips_domains_windows[ip] = dict()
+        for domain, windows in domains_windows.items():
+            result_ips_domains_windows[ip][domain] = list(ips_domains_windows[ip][domain])
+    store_json(result_ips_domains_windows, os.path.join(TRAIN_RESULT_FOLDER_NAME, train_pcap_file[:-len(".pcap")], "ips_domains_windows.json"))
+    return ips_domains_windows
 
 
 def get_domains_devices_nums(devices_fp):
@@ -120,7 +111,7 @@ def get_ips_domains_tfidf(ips_domains_windows_num, domains_idf):
     return ips_tfidf
 
 
-def train_devices(train_pcap_file, train_ips_device_info_file):
+def train_devices(train_pcap_file, train_ips_device_info_file, day):
     """
     训练设备
     :param train_pcap_file: 训练的pcap文件
@@ -135,112 +126,112 @@ def train_devices(train_pcap_file, train_ips_device_info_file):
     train_ips_device_info = load_json(train_ips_device_info_file)
 
     # 获取训练ip的信息
-    train_ips_info = get_train_info(train_pcap_file, excluded_domains, specify_train_ips=False)
-    logger.info("读取{pcap}完成".format(pcap=train_pcap_file))
-
-    # 更新mix中的训练客户端数train_clients_num
-    mix = MIX_COL.find_one({"info": "train"})
-    if mix is None:
-        mix = {"info": "train", "train_clients_num": 0, "train_file": list()}
-        MIX_COL.insert_one(mix)
-    mix["train_clients_num"] += len(train_ips_info)
-    mix["train_file"].append(TRAIN_PCAP_FILE)
-    MIX_COL.update_one({"info": "train"},
-                       {"$set": {"train_clients_num": mix["train_clients_num"], "train_file": mix["train_file"]}},
-                       upsert=True)
-    logger.info("mix 更新完毕")
-
-    # 预处理一下，得到每个域名对应的设备列表domains_devices，可能重复
-    domains_devices = dict()
-    for ip, ip_info in train_ips_info.items():
-        domains_windows_num = ip_info["domains_windows_num"]
-        device = train_ips_device_info[ip]["device"]
-        for domain in domains_windows_num.keys():
-            if domain not in domains_devices.keys():
-                domains_devices[domain] = list()
-            domains_devices[domain].append(device)
-
-    # 每个域名的知识库保存在MongoDB中，包括域名domain, 在对应的设备的出现次数devices_num，总的出现次数total_num以及idf值idf
-    for domain, devices in domains_devices.items():
-        domain_knowledge = DOMAINS_KNOWLEDGE_COL.find_one({"domain": domain})
-        if domain_knowledge is None:
-            domain_knowledge = {"domain": domain, "devices_num": dict(), "total_num": 0, "idf": 0}
-        for device in devices:
-            domain_knowledge["devices_num"][device] = domain_knowledge["devices_num"].get(device, 0) + 1
-        domain_knowledge["devices_num"] = get_sorted_dict(domain_knowledge["devices_num"], compared_target="value")
-        domain_knowledge["total_num"] += len(devices)
-        domain_knowledge["idf"] = math.log((1 + (mix["train_clients_num"] / (1 + domain_knowledge["total_num"]))), 2)
-        # 更新domain_knowledge
-        DOMAINS_KNOWLEDGE_COL.update_one({"domain": domain}, {"$set": domain_knowledge}, upsert=True)
-    logger.info("插入domains_knowledge完毕")
+    file_name = train_pcap_file[:-len(".pcap")]
+    if os.path.exists(os.path.join(TRAIN_RESULT_FOLDER_NAME, file_name, "ips_domains_windows.json")):
+        logger.info("train: {file_name} has been existed".format(file_name=file_name))
+        ips_domains_windows = load_json(os.path.join(TRAIN_RESULT_FOLDER_NAME, file_name, "ips_domains_windows.json"))
+    else:
+        mkdir_if_not_exist(os.path.join(TRAIN_RESULT_FOLDER_NAME, file_name))
+        logger.info("train: read pacap:{file_name}".format(file_name=file_name))
+        ips_domains_windows = get_ips_domains_windows(train_pcap_file, excluded_domains, specify_train_ips=False)
+    # logger.info("读取{pcap}完成".format(pcap=train_pcap_file))
 
     # 每种设备的训练数据保存在MongoDB中，包括设备名device, 设备的类型type，设备的产商vendor，该类设备的训练次数train_num, 设备总出现窗口数windows_num，
     # 每个域名的出现窗口数domains_windows_num, 每个域名的tfidf值domains_tfidf以及总的tfidf的向量长度tfidf_vector_length
-    for ip, ip_info in train_ips_info.items():
+    for ip, domains_windows in ips_domains_windows.items():
         # 找到这个ip对应的设备
-        device = train_ips_device_info[ip]["device"]
+        device = train_ips_device_info[ip]["device"] + "_" + str(day)
         type = train_ips_device_info[ip]["type"]
         vendor = train_ips_device_info[ip]["vendor"]
 
         # 找到MongoDB中该设备的数据，若无，则初始化
-        device_knowledge = DEVICES_KNOWLEDGE_COL.find_one({"device": device})
-        if device_knowledge is None:
-            device_knowledge = {"device": device, "type": type, "vendor": vendor, "train_num": 0, "windows_num": 0,
-                                "domains_windows_num": dict(), "domains_tfidf": dict(), "tfidf_vector_length": 0}
+        device_knowledge = {"device": device, "type": type, "vendor": vendor, "domains_windows_num": dict(),
+                            "domains_tfidf": dict(), "tfidf_vector_length": 0}
 
-        # 如果type和vendor有变动，也要更新
-        device_knowledge["type"] = type
-        device_knowledge["vendor"] = vendor
-        device_knowledge["train_num"] += 1
-        device_knowledge["windows_num"] += ip_info["windows_num"]
-
-        domains_windows_num = ip_info["domains_windows_num"]
-        for domain, windows_num in domains_windows_num.items():
+        for domain, windows in domains_windows.items():
             domain_knowledge = DOMAINS_KNOWLEDGE_COL.find_one({"domain": domain})
-            device_knowledge["domains_windows_num"][domain] = device_knowledge["domains_windows_num"].get(domain,
-                                                                                                          0) + windows_num
-            domain_tf = device_knowledge["domains_windows_num"][domain] / device_knowledge["windows_num"]
-            device_knowledge["domains_tfidf"][domain] = domain_tf * domain_knowledge["idf"]
-        device_knowledge["domains_windows_num"] = get_sorted_dict(device_knowledge["domains_windows_num"],
-                                                                  compared_target="value")
+            device_knowledge["domains_windows_num"][domain] = len(windows)
+            device_knowledge["domains_tfidf"][domain] = len(windows) / TRAIN_WINDOWS_NUM * domain_knowledge["idf"]
+
+        device_knowledge["tfidf_vector_length"] = cal_tfidf_vectors_length(device_knowledge["domains_tfidf"])
+
         device_knowledge["domains_tfidf"] = get_sorted_dict(device_knowledge["domains_tfidf"], compared_target="value")
         device_knowledge["tfidf_vector_length"] = cal_tfidf_vectors_length(device_knowledge["domains_tfidf"])
         # 更新device_knowledge
         DEVICES_KNOWLEDGE_COL.update_one({"device": device}, {"$set": device_knowledge}, upsert=True)
     logger.info("插入devices_knowledge完毕")
 
-    # -----------------------------------------------------------------------------
-    # 训练了新数据，需要对一些数据进行更新
-    # 更新domains_knowledge中所有domain的idf
-    domains_knowledge_dict = get_jsonful_from_mongodb("domains_knowledge")
-    for domain, domain_knowledge in domains_knowledge_dict.items():
-        domain_knowledge["idf"] = math.log((1 + (mix["train_clients_num"] / (1 + domain_knowledge["total_num"]))), 2)
-        DOMAINS_KNOWLEDGE_COL.update_one({"domain": domain},
-                                         {"$set": {"idf": domain_knowledge["idf"]}}, upsert=False)
-    logger.info("更新domains_knowledge完毕")
-
     # 更新devices_knowledge中所有device的domains_tfidf以及tfidf_vector_length
-    devices_knowledge_dict = get_jsonful_from_mongodb("devices_knowledge")
+    devices_knowledge_dict = get_jsonful_from_mongodb("new_devices_knowledge")
     for device, device_knowledge in devices_knowledge_dict.items():
         domains_tfidf = device_knowledge["domains_tfidf"]
         for domain, tfidf in domains_tfidf.items():
-            domain_tf = device_knowledge["domains_windows_num"][domain] / device_knowledge["windows_num"]
-            device_knowledge["domains_tfidf"][domain] = domain_tf * domains_knowledge_dict[domain]["idf"]
+            domain_tf = device_knowledge["domains_windows_num"][domain] / TRAIN_WINDOWS_NUM
+            domain_knowledge = DOMAINS_KNOWLEDGE_COL.find_one({"domain": domain})
+            device_knowledge["domains_tfidf"][domain] = domain_tf * domain_knowledge["idf"]
         device_knowledge["tfidf_vector_length"] = cal_tfidf_vectors_length(device_knowledge["domains_tfidf"])
         DEVICES_KNOWLEDGE_COL.update_one({"device": device}, {
             "$set": {"domains_tfidf": device_knowledge["domains_tfidf"],
                      "tfidf_vector_length": device_knowledge["tfidf_vector_length"]}}, upsert=False)
     logger.info("更新devices_knowledge完毕")
 
+
+def get_domains_idf(pcap_file):
+    top_domains = load_json(TOP_DOMAINS_FILE)
+    other_excluded_domains = load_json(OTHER_EXCLUDED_DOMAINS_FILE)
+    excluded_domains = list()
+    excluded_domains.extend(top_domains)
+    excluded_domains.extend(other_excluded_domains)
+
+    total_ip_set = set()
+    domain_ip = dict()
+    pkts = rdpcap(pcap_file)
+    for i, pkt in enumerate(pkts):
+        # 需要是ipv4
+        if sc.IP in pkt:
+            ip = pkt[sc.IP].dst
+        else:
+            ip = pkt[sc.IPv6].dst
+        if ip in BLACK_IPS:
+            continue
+        domain = str(pkt[sc.DNS].qd.qname, encoding=ENCODING_METHOD)[:-1]  # -1是为了去除domain最后的.
+        total_ip_set.add(ip)
+        if is_excluded_domain(domain, excluded_domains, EXCLUDED_DOMAINS_SUFFIX):  # 过滤特定域名
+            continue
+        domain = erase_protocol_prefix(domain).lower()  # 统一域名格式
+        if domain not in domain_ip.keys():
+            domain_ip[domain] = set()
+        domain_ip[domain].add(ip)
+    domains_idf = dict()
+    for domain, ip_set in domain_ip.items():
+        domains_idf[domain] = math.log((1 + (len(total_ip_set) / (1 + len(ip_set)))), 2)
+        val = {"idf": domains_idf[domain], "devices_num": len(ip_set)}
+        DOMAINS_KNOWLEDGE_COL.update_one({"domain": domain}, {"$set": val}, upsert=True)
+
     # 更新great_domains
     update_great_domains()
     logger.info("更新great_domains完毕")
 
 
-
 @calc_method_time
 def main():
-    train_devices(TRAIN_PCAP_FILE, TRAIN_IPS_DEVICE_INFO_FILE)
+    # get_domains_idf(os.path.join("train_data", "finder", "finder_2019_08.pcap"))
+    # 删除集合new_devices_knowledge和new_great_domains
+    deleted_collections = [DEVICES_KNOWLEDGE_COL, GREAT_DOMAINS_COL]
+    for collection in deleted_collections:
+        collection_name = collection.name
+        if collection.drop():
+            print("删除集合：{collection}  成功".format(collection=collection_name))
+        else:
+            print("删除集合：{collection}  失败".format(collection=collection_name))
+
+    for day in TRAIN_DAYS:
+        train_pcap_file = "finder_2019_08_"+str(day)+".pcap"
+        train_devices(train_pcap_file, TRAIN_IPS_DEVICE_INFO_FILE, day)
+
+    # 更新great_domains
+    update_great_domains()
+    logger.info("更新great_domains完毕")
 
 
 if __name__ == '__main__':
