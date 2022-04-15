@@ -1,14 +1,13 @@
 import os
 
 # 其它的常量
-BLACK_DOMAINS = [".amazonaws.com"]
 BLACK_IPS = ["224.0.0.251", "192.168.1.1", "192.168.1.180", "192.168.1.208", "192.168.1.228", "192.168.1.243",
              "192.168.1.248",
              "192.168.1.239", "169.254.3.23", "169.254.235.84", ":1", ":2"]
 COEFFICIENT_STR_LENGTH = 4
 ENCODING_METHOD = "utf-8"
-# EXCLUDED_DOMAINS_SUFFIX = [".ntp.org", ".arpa", ".local", ".nessus.org", ".#", ".lan", ".wlan0"]
-EXCLUDED_DOMAINS_SUFFIX = [".arpa", ".local", ".nessus.org", ".#", ".lan", ".wlan0"]
+CLEANING_EXCLUDED_DOMAINS_SUFFIX = [".arpa", ".local", ".#", ".lan", ".wlan0"]
+FILTERING_EXCLUDED_DOMAINS_SUFFIX = ["amazonaws.com", "ntp.org", "nessus.org", "example.com", "time.nist.gov"]
 FIND_WORD_USE_STRUCTURE = False  # 是否使用结构化的数据来查找关键词
 IS_LAB_NETWORK = False
 LANGUAGE_MAP = {
@@ -32,7 +31,7 @@ THETA_LOW = 0
 THETA_STEP = 0.002
 THETA_STR_LENGTH = 5
 TOTAL_IPS_DEVICES_INFO_FILE = os.path.join(os.path.join("train_data", "finder", "finder.json"))
-WHOIS_REGISTRANT_BLACK_LIST = ["Not Disclosed", "REDACTED FOR PRIVACY", "Domains By Proxy, LLC"]
+WHOIS_REGISTRANT_BLACK_LIST = ["Not Disclosed", "REDACTED FOR PRIVACY", "Domains By Proxy, LLC"]  # WHOIS 隐私信息黑名单
 WINDOW_SECONDS = 3600  # 时间窗口长度
 
 # MongoDB中collection的名字
@@ -159,7 +158,7 @@ ALL_RESULT_FOLDER_NAME = os.path.join("all_result", TEST_TARGET_NAME)
 DEVICES_PERFORMANCE_FOLDER_NAME = os.path.join(LABEL_RESULT_FOLDER_NAME, "devices_performance")
 DEVICES_PERFORMANCE_FILE = os.path.join(TEST_RESULT_FOLDER_NAME, "devices_performance.json")
 
-MODE = "53"
+MODE = "only16"
 
 TRAIN_LABEL_DAYS = {
     "1": [
@@ -222,6 +221,10 @@ TRAIN_LABEL_DAYS = {
         [15],
         [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
     ],
+    "only16": [
+        [16],
+        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
+    ],
     "only11": [
         [11],
         [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
@@ -247,7 +250,7 @@ TRAIN_LABEL_DAYS = {
 TRAIN_DAYS, LABEL_DAYS = TRAIN_LABEL_DAYS[MODE]
 
 TEST_FILE_LOW = 1
-TEST_FILE_HIGH = 30
+TEST_FILE_HIGH = 1
 TRAIN_WINDOWS_NUM = 24  # 每个训练的模型的窗口数
 LABEL_WINDOWS_NUM = 24  # 每个标记的模型的窗口数
 TEST_WINDOWS_NUM = 24  # 每个测试的模型的窗口数

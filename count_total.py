@@ -595,16 +595,16 @@ def main():
 
     # get_test_ips_devices_info_by_test_ips_info()  # 用result文件夹中的test_ips_info来生成该pcap的设备描述文件(data文件夹中)
     #
-    # get_devices_performance()  # 获取每个设备在最佳阈值下的表现
-    #
-    # average_precision, average_recall, average_f05, average_f1, average_f2 = get_average_performance()
-    # logger.info("mode:{mode}\nprecision:{precision}\nrecall:{recall}\nf05:{f05}\nf1:{f1}\nf2:{f2}"
-    #             .format(mode=MODE, precision=average_precision, recall=average_recall, f05=average_f05, f1=average_f1,
-    #                     f2=average_f2))
+    get_devices_performance()  # 获取每个设备在最佳阈值下的表现
+
+    average_precision, average_recall, average_f05, average_f1, average_f2 = get_average_performance()
+    logger.info("mode:{mode}\nprecision:{precision}\nrecall:{recall}\nf05:{f05}\nf1:{f1}\nf2:{f2}"
+                .format(mode=MODE, precision=average_precision, recall=average_recall, f05=average_f05, f1=average_f1,
+                        f2=average_f2))
 
     # get_average_performance_nat()  # 获取NAT情况下的结果
 
-    draw_theta_coefficients_performance()  # 画出在不同阈值系数下的NAT识别情况
+    # draw_theta_coefficients_performance()  # 画出在不同阈值系数下的NAT识别情况
 
     # draw_devices_performance()  # 每个设备一张图
 

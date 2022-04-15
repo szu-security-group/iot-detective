@@ -3,11 +3,11 @@
 .pytest_cache
 .vscode
 __pycache__
-logs
-train_data
-train_result
+all_result
 label_data
 label_result
+logs
 test_data
 test_result
-all_result
+train_data
+train_result

@@ -481,7 +481,7 @@ def get_test_ips_info(test_pcap_file, is_nat=False):
             ip = NAT_IP  # 融合的ip，视为NAT
         domain = str(pkt[sc.DNS].qd.qname, encoding=ENCODING_METHOD)[:-1]
         window_index = math.floor((pkt.time - start_time) / WINDOW_SECONDS) + 1
-        if is_excluded_domain(domain, excluded_domains, EXCLUDED_DOMAINS_SUFFIX):
+        if is_excluded_domain(domain, excluded_domains, CLEANING_EXCLUDED_DOMAINS_SUFFIX):
             continue
         domain = erase_protocol_prefix(domain).lower()  # 统一域名格式
         if ip not in ips_domains_windows.keys():
@@ -705,22 +705,22 @@ def main():
                                                                   "test_ips_possible_devices_similarity.json")
         LABEL_IPS_REPORT_FILE = os.path.join(LABEL_RESULT_FOLDER_NAME, "test_ips_report.json")
         LABEL_IPS_INFO_FILE = os.path.join(LABEL_RESULT_FOLDER_NAME, "test_ips_info.json")
-    #
-    #     # 1. 测试设备信息test_ips_devices_info的准备
-    #     # get_test_ips_devices_info(LABEL_IPS_DEVICES_INFO_FILE)  # 修正测试设备信息
-    #
+
+        # 1. 测试设备信息test_ips_devices_info的准备
+        # get_test_ips_devices_info(LABEL_IPS_DEVICES_INFO_FILE)  # 修正测试设备信息
+
     # 2. 创建好测试结果文件的文件夹
     #     mkdir_if_not_exist(LABEL_RESULT_FOLDER_NAME)
-    # #
-    # #     # 3. 分析测试pcap
-    # #     get_test_ips_info(LABEL_PCAP_FILE, is_nat=False)  # 获取测试集中每个ip的domain tf-idf，这里是每个ip对应一个设备
-    # #     # get_test_ips_info(LABEL_PCAP_FILE, is_nat=True)  # 获取测试集中每个ip的domain tf-idf，这里弄成NAT模式
-    #     get_test_ips_possible_devices()  # 对测试集中每个ip查询的domain，去最佳域名集寻找到可能匹配的设备，得到每个ip可能匹配的设备
-    #     get_test_ips_possible_devices_similarity()  # 得到测试集中每个ip和其可能匹配的设备间的tf-idf相似度
+    #
+        # 3. 分析测试pcap
+        # get_test_ips_info(LABEL_PCAP_FILE, is_nat=False)  # 获取测试集中每个ip的domain tf-idf，这里是每个ip对应一个设备
+        # get_test_ips_info(LABEL_PCAP_FILE, is_nat=True)  # 获取测试集中每个ip的domain tf-idf，这里弄成NAT模式
+        get_test_ips_possible_devices()  # 对测试集中每个ip查询的domain，去最佳域名集寻找到可能匹配的设备，得到每个ip可能匹配的设备
+        get_test_ips_possible_devices_similarity()  # 得到测试集中每个ip和其可能匹配的设备间的tf-idf相似度
 
-    # get_devices_thetas_performance()
+    get_devices_thetas_performance()
 
-    # get_devices_best_theta_performance()
+    get_devices_best_theta_performance()
 
 
 if __name__ == '__main__':

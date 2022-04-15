@@ -155,7 +155,7 @@ def get_test_devices_fp(pkts, train_domains):
         window_index = math.floor((pkt.time - start_time) / WINDOW_SECONDS) + 1
         if ip in BLACK_IPS:
             continue
-        if is_excluded_domain(domain, TOP_DOMAINS, EXCLUDED_DOMAINS_SUFFIX):
+        if is_excluded_domain(domain, TOP_DOMAINS, CLEANING_EXCLUDED_DOMAINS_SUFFIX):
             continue
         domain = erase_protocol_prefix(domain)
         if ip not in devices_fp.keys():
@@ -1008,7 +1008,7 @@ def main():
     pass
 
     # # 1.1 从pcap包中获取源数据
-    # ips_windows_num, ips_domains_windows_num = get_train_info(TRAIN_PCAP_FILE, EXCLUDED_DOMAINS_SUFFIX,
+    # ips_windows_num, ips_domains_windows_num = get_train_info(TRAIN_PCAP_FILE, CLEANING_EXCLUDED_DOMAINS_SUFFIX,
     #                                                                            train_ips=TRAIN_IPS)
     # print("train_ips_domains_frequency: ", train_ips_domains_frequency)
     # print("windows_num: ", windows_num)

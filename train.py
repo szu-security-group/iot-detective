@@ -66,7 +66,7 @@ def get_ips_domains_windows(train_pcap_file, excluded_domains, specify_train_ips
         if specify_train_ips:
             if ip not in train_ips:
                 continue
-        if is_excluded_domain(domain, excluded_domains, EXCLUDED_DOMAINS_SUFFIX):  # 过滤特定域名
+        if is_excluded_domain(domain, excluded_domains, CLEANING_EXCLUDED_DOMAINS_SUFFIX):  # 过滤特定域名
             continue
         domain = erase_protocol_prefix(domain).lower()  # 统一域名格式
         if ip not in ips_domains_windows.keys():
@@ -196,7 +196,7 @@ def get_domains_idf(pcap_file):
             continue
         domain = str(pkt[sc.DNS].qd.qname, encoding=ENCODING_METHOD)[:-1]  # -1是为了去除domain最后的.
         total_ip_set.add(ip)
-        if is_excluded_domain(domain, excluded_domains, EXCLUDED_DOMAINS_SUFFIX):  # 过滤特定域名
+        if is_excluded_domain(domain, excluded_domains, CLEANING_EXCLUDED_DOMAINS_SUFFIX):  # 过滤特定域名
             continue
         domain = erase_protocol_prefix(domain).lower()  # 统一域名格式
         if domain not in domain_ip.keys():

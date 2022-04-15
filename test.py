@@ -83,8 +83,9 @@ def get_test_ips_other_domains():
                 ip_domains_set -= set(devices_knowledge_dict[possible_device]["domains_tfidf"].keys())
         test_ips_other_domains[ip] = list()
         for ip_domain in ip_domains_set:
-            if ip_domain not in BLACK_DOMAINS:
-                test_ips_other_domains[ip].append(ip_domain)
+            for filtering_excluded_domain_suffix in FILTERING_EXCLUDED_DOMAINS_SUFFIX:
+                if not ip_domain.endswith(filtering_excluded_domain_suffix):
+                    test_ips_other_domains[ip].append(ip_domain)
     return test_ips_other_domains
 
 
@@ -431,13 +432,18 @@ def get_test_ips_report(verify=False):
         test_ips_report[ip]["domains_guessed_results"] = dict()
         # for domain in test_ips_other_domains[ip]:
         for domain in ips_domains_tfidf[ip].keys():
-            # if test_ips_domains_regularity_score[ip][domain] >= REGULARITY_THRESHOLD:
-            if test_ips_domains_regularity_score[ip][domain] >= 0:
-                # 如果过滤完匹配设备域名集后的域名的规律得分大于等于REGULARITY_THRESHOLD，就去猜测vendor和type信息
-                test_ips_report[ip]["domains_guessed_results"][domain] = {
-                    "type": guess_type(common_types, domain),
-                    "vendor": guess_vendor(global_vendors, domain)
-                }
+            to_guess = True
+            for filtering_excluded_domain_suffix in FILTERING_EXCLUDED_DOMAINS_SUFFIX:
+                if domain.endswith(filtering_excluded_domain_suffix):  # 排除这些域名
+                    to_guess = False
+            if to_guess:
+                if test_ips_domains_regularity_score[ip][domain] >= REGULARITY_THRESHOLD:
+                # if test_ips_domains_regularity_score[ip][domain] >= 0:
+                    # 如果过滤完匹配设备域名集后的域名的规律得分大于等于REGULARITY_THRESHOLD，就去猜测vendor和type信息
+                    test_ips_report[ip]["domains_guessed_results"][domain] = {
+                        "type": guess_type(common_types, domain),
+                        "vendor": guess_vendor(global_vendors, domain)
+                    }
         if i == test_ips_num:
             break
     store_json(test_ips_report, TEST_IPS_REPORT_FILE)
@@ -487,7 +493,7 @@ def get_test_ips_info(test_pcap_file, is_nat=False):
             ip = raw_ip_map_nat_ip[ip]  # 将raw_ip映射到random_ip
         domain = str(pkt[sc.DNS].qd.qname, encoding=ENCODING_METHOD)[:-1]
         window_index = math.floor((pkt.time - start_time) / WINDOW_SECONDS) + 1
-        if is_excluded_domain(domain, excluded_domains, EXCLUDED_DOMAINS_SUFFIX):
+        if is_excluded_domain(domain, excluded_domains, CLEANING_EXCLUDED_DOMAINS_SUFFIX):
             continue
         domain = erase_protocol_prefix(domain).lower()  # 统一域名格式
         if ip not in ips_domains_windows.keys():
@@ -570,7 +576,7 @@ def main():
     global TEST_TARGET_NAME, TEST_PCAP_FILE, TEST_IPS_DEVICES_INFO_FILE, TEST_RESULT_FOLDER_NAME, ALL_THETAS_PERFORMANCE_FILE, TEST_IPS_DOMAINS_REGULARITY_SCORE_FILE, TEST_IPS_DOMAINS_PKTS_TIME_FILE, TEST_IPS_OTHER_DOMAINS_FILE, TEST_IPS_PERFORMANCE_FILE, TEST_IPS_POSSIBLE_DEVICES_FILE, TEST_IPS_POSSIBLE_DEVICES_SIMILARITY_FILE, TEST_IPS_REPORT_FILE, TEST_IPS_INFO_FILE
     for file_index in range(TEST_FILE_LOW, TEST_FILE_HIGH + 1):
         # 0. 修正常量
-        gen_nat = True
+        gen_nat = False
         if gen_nat:
             TEST_TARGET_NAME = TEST_PREFIX + str(file_index) + "_NAT"
         else:
@@ -598,12 +604,12 @@ def main():
         mkdir_if_not_exist(os.path.join(TEST_RESULT_FOLDER_NAME))
 
         # 3. 分析测试pcap
-        get_test_ips_info(TEST_PCAP_FILE, is_nat=gen_nat)  # 获取测试集中每个ip的domain tf-idf
-        get_test_ips_possible_devices()  # 对测试集中每个ip查询的domain，去最佳域名集寻找到可能匹配的设备，得到每个ip可能匹配的设备
-        get_test_ips_possible_devices_similarity()  # 得到测试集中每个ip和其可能匹配的设备间的tf-idf相似度
+        # get_test_ips_info(TEST_PCAP_FILE, is_nat=gen_nat)  # 获取测试集中每个ip的domain tf-idf
+        # get_test_ips_possible_devices()  # 对测试集中每个ip查询的domain，去最佳域名集寻找到可能匹配的设备，得到每个ip可能匹配的设备
+        # get_test_ips_possible_devices_similarity()  # 得到测试集中每个ip和其可能匹配的设备间的tf-idf相似度
 
         # 4. 进一步分析type和vendor，并生成报告
-        # get_test_ips_report(verify=True)  # 获取测试ip的报告
+        get_test_ips_report(verify=True)  # 获取测试ip的报告
     pass
 
 
